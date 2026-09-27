@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FB Helper</title>
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/popup.css">
+</head>
+<body>
+  <div class="bar">
+    <header class="top">
+      <div class="brand"><img src="images/logo.webp" alt="" width="20" height="20">FB Helper</div>
+      <span id="usage" class="pill hidden"></span>
+    </header>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" id="tabbtn-token" data-tab="token" role="tab" aria-selected="true" aria-controls="tab-token">Токен</button>
+      <button class="tab" id="tabbtn-cookies" data-tab="cookies" role="tab" aria-selected="false" aria-controls="tab-cookies">Cookie</button>
+      <button class="tab" id="tabbtn-accounts" data-tab="accounts" role="tab" aria-selected="false" aria-controls="tab-accounts">Кабинеты</button>
+    </nav>
+  </div>
+
+  <main>
+    <section id="tab-token" class="panel active" role="tabpanel" aria-labelledby="tabbtn-token">
+      <div class="card">
+        <div class="token-row">
+          <div class="field mono" id="tokenBox">—</div>
+          <button id="checkToken" class="btn" title="Профиль, приложение и права токена" aria-label="Проверить токен" disabled><i class="i i-check"></i>Проверить</button>
+          <button id="clearSession" class="icon-btn" title="Сбросить токен и кэш кабинетов" aria-label="Сбросить токен и кэш кабинетов"><i class="i i-trash"></i></button>
+        </div>
+        <div class="actions">
+          <button id="grabToken" class="btn primary"><i class="i i-copy"></i>Скопировать токен</button>
+          <button id="copyEnv" class="btn"><i class="i i-copy"></i>Токен + cookie</button>
+        </div>
+        <div id="kindCard" class="kind hidden"></div>
+        <details class="more guide">
+          <summary><i class="i i-chevron"></i>Типы токенов</summary>
+          <div class="guide-body">
+            <div class="guide-row"><span class="guide-code">EAAB</span><span><b>Ads Manager</b> — основной для рекламы: запуск и правка.</span></div>
+            <div class="guide-row"><span class="guide-code">EAAI</span><span><b>Automated Rules</b> — настройка автоправил.</span></div>
+            <div class="guide-row"><span class="guide-code">EAAG</span><span><b>Business Manager</b> — бизнес-активы: страницы, Instagram, лиды, WhatsApp, каталоги и реклама.</span></div>
+            <div class="guide-row"><span class="guide-code">EAAH</span><span><b>Commerce Manager</b> — каталоги: товары и расширенное управление.</span></div>
+            <div class="guide-row"><span class="guide-code">EAAd</span><span><b>Events Manager</b> — события: пиксели, датасеты и отслеживание.</span></div>
+          </div>
+        </details>
+        <dl id="tokenInfo" class="kv hidden"></dl>
+      </div>
+    </section>
+
+    <section id="tab-cookies" class="panel" role="tabpanel" aria-labelledby="tabbtn-cookies">
+      <div class="card">
+        <div class="field mono" id="cookieBox">—</div>
+        <div class="actions">
+          <button id="copyCookies" class="btn primary" title="Строка cookie: c_user=…; xs=…; …"><i class="i i-copy"></i>Скопировать cookie</button>
+          <button id="copyCookieJson" class="btn" title="Те же cookie с атрибутами (domain, path, срок) — для импорта в антидетект"><i class="i i-copy"></i>JSON</button>
+        </div>
+        <div id="cookieStatus" class="source"></div>
+      </div>
+    </section>
+
+    <section id="tab-accounts" class="panel" role="tabpanel" aria-labelledby="tabbtn-accounts">
+      <div class="card">
+        <div class="search">
+          <i class="i i-search"></i>
+          <input id="accountFilter" class="field" type="search" placeholder="Поиск" aria-label="Поиск кабинетов" autocomplete="off">
+          <button id="copyLiveIds" class="btn" title="ID активных кабинетов списком, по одному в строке" disabled><i class="i i-copy"></i>ID активных</button>
+          <button id="loadAccounts" class="icon-btn" title="Обновить" aria-label="Обновить"><i class="i i-refresh"></i></button>
+        </div>
+        <div class="seg" id="periodSeg" role="group" aria-label="Период спенда"></div>
+        <div class="total" id="accountsTotal"></div>
+        <div class="chips" id="statusChips"></div>
+      </div>
+      <div id="accountsList" class="list"></div>
+    </section>
+
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/popup.js"></script>
+</body>
+</html>
