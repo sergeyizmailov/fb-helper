@@ -3,17 +3,18 @@
   color-scheme: light;
   /* Facebook palette: brand blue #4267B2 (PMS 2131 C), UI grays / status colours from facebook.com */
   --color-accent: #4267B2;
-  --color-accent-hover: #365899;
+  --color-accent-hover: #3A5DA5;   /* one small step darker than the accent */
   --color-accent-muted: #4267B21A;
   --color-on-accent: #FFFFFF;
   --color-background-surface: #FFFFFF;
   --color-background-muted: #F0F2F5;
-  --color-overlay-hover: #F2F3F5;
-  --color-overlay-pressed: #E4E6EB;
+  /* Hover = the same small step everywhere: grey fill → a shade darker, white row → a shade off-white. */
+  --color-hover-fill: #E9EBEE;
+  --color-hover-row: #F7F8FA;
   --color-text-primary: #1C1E21;
   --color-text-secondary: #606770;
   --color-text-disabled: #BCC0C4;
-  --color-border: #F0F2F5;   /* = hover fill, so a hovered row blends into its dividers */
+  --color-border: #F0F2F5;
   --color-success: #2B8A3E;
   --color-success-dot: #42B72A;
   --color-success-muted: #42B72A1F;
@@ -79,9 +80,8 @@ body {
   height: var(--size-element-sm); border-radius: var(--radius-inner);
   font: 500 13px var(--font); cursor: pointer;
 }
-.tab:hover { color: var(--color-text-primary); }
+.tab:hover, .tab:focus-visible { color: var(--color-text-primary); }
 .tab.active { background: var(--color-background-surface); color: var(--color-text-primary); }
-.tab:focus-visible { color: var(--color-text-primary); }
 
 /* ---------- dividers: 1px, inset 16px from both edges, never edge-to-edge ---------- */
 .bar::after, .card:not(:last-child)::after, .acc:not(:last-child)::after {
@@ -104,13 +104,14 @@ main { padding-bottom: 0; }
   appearance: none; border: 0; cursor: pointer;
   display: inline-flex; align-items: center; gap: var(--spacing-1-5);
   height: var(--size-element-md); padding: 0 var(--spacing-3); border-radius: var(--radius-element);
-  background: var(--color-background-muted); color: var(--color-text-primary);
+  background: var(--color-background-muted); color: var(--color-text-secondary);   /* soft grey, like the icon buttons */
   font: 500 14px var(--font); text-decoration: none; white-space: nowrap;
 }
-.btn:hover:not(:disabled) { background: var(--color-overlay-pressed); }
+.btn:hover:not(:disabled), .btn:focus-visible { background: var(--color-hover-fill); }
+.btn:not(.primary):hover:not(:disabled), .btn:not(.primary):focus-visible { color: var(--color-text-primary); }
 .btn:disabled { color: var(--color-text-disabled); cursor: default; }
 .btn.primary { background: var(--color-accent); color: var(--color-on-accent); }
-.btn.primary:hover:not(:disabled) { background: var(--color-accent-hover); }
+.btn.primary:hover:not(:disabled), .btn.primary:focus-visible { background: var(--color-accent-hover); }
 .btn.primary:disabled { background: var(--color-background-muted); color: var(--color-text-disabled); }
 .btn.sm { height: var(--size-element-sm); padding: 0 var(--spacing-3); font-size: 13px; }
 .btn.sm .i { --size-icon: 16px; }
@@ -119,13 +120,14 @@ main { padding-bottom: 0; }
   display: inline-grid; place-items: center; flex: none;
   width: var(--size-element-md); height: var(--size-element-md); border-radius: var(--radius-element);
 }
-.icon-btn:hover:not(:disabled) { background: var(--color-overlay-hover); color: var(--color-text-primary); }
+.icon-btn:hover:not(:disabled), .icon-btn:focus-visible { color: var(--color-text-primary); }
 .icon-btn:disabled { color: var(--color-text-disabled); cursor: default; }
-/* No focus rings anywhere; keyboard focus shows as the hover background. */
+/* One quiet hover everywhere: grey text/icons turn near-black, a filled control steps one shade darker,
+   nothing else. No focus rings; keyboard focus looks exactly like hover. */
 :focus, :focus-visible { outline: 0; }
-.btn:focus-visible { background: var(--color-overlay-pressed); }
-.btn.primary:focus-visible { background: var(--color-accent-hover); }
-.icon-btn:focus-visible, .acc-id:focus-visible { background: var(--color-overlay-hover); color: var(--color-text-primary); }
+.tab, .seg-btn, .btn, .icon-btn, .field, .acc-head, .acc-id, .acc-link, .more summary, .kind-ads a {
+  transition: color .15s ease, background-color .15s ease;
+}
 
 .field {
   width: 100%; min-width: 0; border: 0; border-radius: var(--radius-element);
@@ -133,7 +135,7 @@ main { padding-bottom: 0; }
   height: var(--size-element-md); padding: 0 var(--spacing-3); font: 14px var(--font);
 }
 .field::placeholder { color: var(--color-text-disabled); }
-.field:focus { outline: 0; background: var(--color-overlay-pressed); }
+.field:focus { background: var(--color-hover-fill); }
 .mono { font-family: var(--mono); font-size: 12.5px; }
 /* Token: one line; when longer than the field it ends in "…", with the same 12px inset on both sides.
    Block, not flex — a flex text item can't shrink and would blow the box past the popup width. */
@@ -265,14 +267,14 @@ main { padding-bottom: 0; }
 /* ---------- accounts ---------- */
 .list { display: grid; }
 .acc { position: relative; }
-/* Hover = full-width, square fill between the dividers (same colour, so they blend in).
+/* Hover = full-width, square off-white fill between the dividers (the shared one-step hover).
    Text stays 16px from the edge. */
 .acc-head {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px var(--spacing-3); align-items: center;
   margin: -1px 0 0; padding: calc(var(--spacing-3) + 1px) var(--spacing-4) var(--spacing-3); cursor: pointer;
   position: relative; z-index: 2;   /* 1px up and above the dividers: covers the line above and below */
 }
-.acc-head:hover, .acc-head:has(.acc-title:focus-visible) { background: var(--color-background-muted); }
+.acc-head:hover, .acc-head:has(.acc-title:focus-visible) { background: var(--color-hover-row); }
 .acc-title {
   appearance: none; border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer;
   display: flex; align-items: center; gap: 6px; min-width: 0;
@@ -290,7 +292,7 @@ main { padding-bottom: 0; }
   font: 12px var(--mono); color: var(--color-text-secondary);
 }
 .acc-id .i { --size-icon: 14px; color: var(--color-text-disabled); }
-.acc-id:hover, .acc-id:hover .i { color: var(--color-text-primary); }
+.acc-id:hover, .acc-id:hover .i, .acc-id:focus-visible, .acc-id:focus-visible .i { color: var(--color-text-primary); }
 .acc-head > .pill { justify-self: end; }
 .acc-spend { justify-self: end; font-family: var(--mono); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .acc-spend.muted { color: var(--color-text-disabled); font-weight: 500; }
