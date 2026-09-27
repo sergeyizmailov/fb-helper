@@ -355,15 +355,29 @@ function pickToken(r) {
   return tokens.find((t) => t.startsWith("EAAB")) || tokens[0] || null;
 }
 // Reads a fresh token from the FB tabs. Returns it, or null after showing why — never the old cached one.
-// silent: on popup open — no clipboard, no toasts, and the last token is kept if no tab has one.
+// The field only ever shows a token some open FB tab has right now: with no FB tab, or none with a token,
+// the old one is dropped (it couldn't be copied anyway — copying always re-reads the tab).
+// silent: on popup open — no clipboard, no toasts; the reason goes into the token field.
 async function grabToken({ toClipboard = true, silent = false } = {}) {
   const op = ++state.grabOp;
   let gen = state.gen;
   const current = () => op === state.grabOp && gen === state.gen;
-  const fail = (msg) => { if (silent) { if (!state.token) renderToken(msg); } else toast(msg, true); return null; };
+  const none = async (msg) => {
+    if (state.token) {
+      newGeneration();                                 // also cancels requests still running on the old token
+      gen = state.gen;                                 // our own bump, not a reset
+      Object.assign(state, { token: null, tokenSource: null });
+      await chrome.storage.session.remove(["token", "tokenSource", "accounts", "fetchedAt", "truncated"]);
+      if (!current()) return null;
+      renderAccounts();
+    }
+    renderToken(msg);
+    if (!silent) toast(msg, true);
+    return null;
+  };
   const tabs = await facebookTabs();
   if (!current()) return null;
-  if (!tabs.length) return fail("Открой Facebook в этом профиле");
+  if (!tabs.length) return none("Открой Facebook в этом профиле");
   // The first tab that has a token wins: the active FB tab may be a page without one (feed, still loading).
   let pick = null, src = null, read = [];
   for (const tab of tabs.slice(0, 5)) {
@@ -376,24 +390,8 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
     pick = pickToken(r);
     if (pick) { src = r; break; }
   }
-  if (!read.length) return fail("Нет доступа к вкладке FB");
-  if (!pick) {
-    const msg = `Токен не найден на ${read.length === 1 ? String(read[0].host || "этой вкладке") : "открытых вкладках Facebook"}`;
-    // Popup open: keep the last token — it stays valid whatever page is open now.
-    if (silent) return fail(msg);
-    // Explicit click: the user wants a current token and no tab has one — drop the old one, don't leave it hanging.
-    if (state.token) {
-      newGeneration();                                 // also cancels requests still running on the old token
-      gen = state.gen;                                 // our own bump, not a reset
-      Object.assign(state, { token: null, tokenSource: null });
-      await chrome.storage.session.remove(["token", "tokenSource", "accounts", "fetchedAt", "truncated"]);
-      if (!current()) return null;
-      renderAccounts();
-    }
-    renderToken(msg);
-    toast(msg, true);
-    return null;
-  }
+  if (!read.length) return none("Нет доступа к вкладке FB — обнови её");
+  if (!pick) return none(`Токен не найден на ${read.length === 1 ? String(read[0].host || "этой вкладке") : "открытых вкладках Facebook"}`);
   if (pick !== state.token) {
     newGeneration();
     gen = state.gen;                                   // our own bump, not a reset
