@@ -211,9 +211,9 @@ main { padding-bottom: 0; }
 .more summary { list-style: none; cursor: pointer; width: fit-content; display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--color-text-secondary); font-size: 13px; font-weight: 500; }
 .more summary::-webkit-details-marker { display: none; }
 .more summary:hover, .more summary:focus-visible { color: var(--color-text-primary); }
-.more summary .i-chevron { --size-icon: 16px; color: var(--color-text-disabled); flex: none; }
-.more summary:hover .i-chevron, .more summary:focus-visible .i-chevron { color: var(--color-text-secondary); }
-.more[open] summary .i-chevron { transform: rotate(180deg); color: var(--color-text-secondary); }
+/* The chevron takes the text colour, so text and icon darken together on hover — like every other control. */
+.more summary .i-chevron { --size-icon: 16px; flex: none; }
+.more[open] summary .i-chevron { transform: rotate(180deg); }
 .more .when-open, .more[open] .when-closed { display: none; }
 .more[open] .when-open { display: inline; }
 .perm-list { margin-top: var(--spacing-2); color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
