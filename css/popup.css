@@ -137,6 +137,8 @@ main { padding-bottom: 0; }
 .field::placeholder { color: var(--color-text-disabled); }
 .field:focus { background: var(--color-hover-fill); }
 .mono { font-family: var(--mono); font-size: 12.5px; }
+/* Hints in the token/cookie fields ("Открой Facebook…", "Cookie не найдены") are text, not data: UI font. */
+.field.mono:not(.filled) { font-family: var(--font); font-size: 14px; }
 /* Token: one line; when longer than the field it ends in "…", with the same 12px inset on both sides.
    Block, not flex — a flex text item can't shrink and would blow the box past the popup width. */
 #tokenBox {
