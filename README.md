@@ -1,5 +1,7 @@
 # FB Helper 2.1.0
 
+![FB Helper — token, cookies and ad accounts](docs/cover.png)
+
 Расширение Chrome (MV3): токен, cookie и статусы рекламных кабинетов Facebook. Только чтение — в рекламе ничего не меняет.
 
 ## Установка
@@ -26,7 +28,7 @@ Chrome 121+. Нужна открытая вкладка Facebook в этом п�
 ## Сборка архива
 
 ```
-git ls-files -co --exclude-standard | grep -v '^\.git' | zip -q fb-helper-2.1.0.zip -@
+git ls-files -co --exclude-standard | grep -v '^\.git' | grep -v '^docs/' | grep -v '\.zip$' | zip -q fb-helper-2.1.0.zip -@
 ```
 
 Иконки — Lucide (ISC), шрифт — Golos Text (SIL OFL 1.1), лицензии лежат рядом с файлами.
