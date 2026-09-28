@@ -173,8 +173,15 @@ main { padding-bottom: 0; }
 #cookieBox.filled .ck-scroll::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); background-clip: padding-box; }
 #cookieBox .ck-n { color: var(--color-text-primary); font-weight: 600; }
 #cookieBox .ck-v { color: var(--color-text-secondary); }
-.token-row { display: flex; align-items: center; gap: var(--spacing-1); min-width: 0; }
-.token-row .field { flex: 1; min-width: 0; }
+/* Token field on top, the two copy buttons under it: the buttons share exactly the field's width (same
+   start and end), each growing from its own text width so the longer label never gets squeezed.
+   "Проверить" and the trash sit to the right of the field only. */
+.token-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center;
+  gap: var(--spacing-3) var(--spacing-1); min-width: 0;
+}
+.token-actions { grid-column: 1; display: flex; gap: var(--spacing-1-5); min-width: 0; }
+.token-actions .btn { flex: 1 1 auto; justify-content: center; }
 .source { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-1-5) var(--spacing-2); font-size: 13px; color: var(--color-text-secondary); }
 .source:empty { display: none; }
 /* Token kind: plain text under the field — badge + app, what it is for, where ads go. */

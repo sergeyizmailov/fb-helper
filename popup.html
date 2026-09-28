@@ -23,14 +23,14 @@
   <main>
     <section id="tab-token" class="panel active" role="tabpanel" aria-labelledby="tabbtn-token">
       <div class="card">
-        <div class="token-row">
+        <div class="token-grid">
           <div class="field data" id="tokenBox">—</div>
           <button id="checkToken" class="btn ghost" title="Профиль, приложение и права токена" aria-label="Проверить токен" disabled><i class="i i-check"></i>Проверить</button>
           <button id="clearSession" class="icon-btn" title="Сбросить токен и кэш кабинетов" aria-label="Сбросить токен и кэш кабинетов"><i class="i i-trash"></i></button>
-        </div>
-        <div class="actions">
-          <button id="grabToken" class="btn primary"><i class="i i-copy"></i>Скопировать токен</button>
-          <button id="copyEnv" class="btn"><i class="i i-copy"></i>Токен + cookie</button>
+          <div class="token-actions">
+            <button id="grabToken" class="btn primary"><i class="i i-copy"></i>Скопировать токен</button>
+            <button id="copyEnv" class="btn"><i class="i i-copy"></i>Токен + cookie</button>
+          </div>
         </div>
         <div id="kindCard" class="kind hidden"></div>
         <details class="more guide">
@@ -63,7 +63,7 @@
         <div class="search">
           <i class="i i-search"></i>
           <input id="accountFilter" class="field" type="search" placeholder="Поиск" aria-label="Поиск кабинетов" autocomplete="off">
-          <button id="copyLiveIds" class="btn" title="ID активных кабинетов списком, по одному в строке" disabled><i class="i i-copy"></i>ID активных</button>
+          <button id="copyLiveIds" class="btn ghost" title="ID активных кабинетов списком, по одному в строке" disabled><i class="i i-copy"></i>ID активных</button>
           <button id="loadAccounts" class="icon-btn" title="Обновить" aria-label="Обновить"><i class="i i-refresh"></i></button>
         </div>
         <div class="seg" id="periodSeg" role="group" aria-label="Период спенда"></div>
