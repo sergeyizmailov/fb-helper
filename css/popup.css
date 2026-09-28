@@ -69,6 +69,15 @@ body {
   height: 48px; padding: 0 var(--spacing-4);
 }
 .brand { display: flex; align-items: center; gap: var(--spacing-2); font-size: var(--text-lg); font-weight: 600; }   /* the logo is the one bold word */
+.top-right { display: flex; align-items: center; gap: var(--spacing-3); }
+/* RU · EN: two plain text buttons, the active one near-black, the other grey — the same rest/hover pair as every icon button. */
+.lang { display: flex; align-items: center; gap: var(--spacing-1); }
+.lang-btn {
+  appearance: none; border: 0; background: transparent; cursor: pointer; padding: 0 var(--spacing-1); height: 24px;
+  font: var(--text-sm) var(--font); letter-spacing: .02em; color: var(--color-text-secondary); border-radius: var(--radius-inner);
+}
+.lang-btn:hover, .lang-btn:focus-visible, .lang-btn.active { color: var(--color-text-primary); }
+.lang-btn.active { cursor: default; }
 .tabs {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-1);
   margin: 0 var(--spacing-4); padding: var(--spacing-1);   /* 4px grey rim around the active pill */
@@ -128,7 +137,7 @@ main { padding-bottom: 0; }
 /* One quiet hover everywhere: grey text/icons turn near-black, a filled control steps one shade darker,
    nothing else. No focus rings; keyboard focus looks exactly like hover. */
 :focus, :focus-visible { outline: 0; }
-.tab, .seg-btn, .btn, .icon-btn, .field, .acc-head, .acc-id, .acc-link, .more summary, .kind-ads a, .guide-row a {
+.tab, .seg-btn, .btn, .icon-btn, .field, .acc-head, .acc-id, .acc-link, .more summary, .kind-ads a, .guide-row a, .lang-btn {
   transition: color .15s ease, background-color .15s ease;
 }
 

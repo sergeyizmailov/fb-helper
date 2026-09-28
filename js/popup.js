@@ -6,6 +6,8 @@
 // or reloading them must not throw away accounts you just loaded. Another user in the profile drops it;
 // storage.local holds only a newer Graph API version learned from Graph itself.
 
+import { t, tn, has, locale, getLang, setLang, loadLang, applyStatic } from "./i18n.js";
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 
@@ -27,19 +29,19 @@ const GRAPH_URL = "https://graph.facebook.com/";
 // The page's answer is re-checked here: the MAIN world is the page's own JS and can return anything.
 const TOKEN_RE = /^EAA[A-Za-z0-9]{62,}$/;
 // First-party token prefixes: each is a different Meta app with its own fixed scope set.
-// app = the Meta app behind the prefix; use = what it can do (live-checked 2026-09-27 on one profile).
+// app = the Meta app behind the prefix; what it can do = t("kind.<prefix>") (live-checked 2026-09-27 on one profile).
 // ads: does this token actually launch/edit ads (ads_management)? live-checked per prefix.
 // false → show the "not an ads token · open Ads Manager" hint; true → hide it.
 const TOKEN_KIND = {
-  EAAB: { app: "Ads Manager", tone: "ok", ads: true, use: "Основной для рекламы: запуск и правка." },
-  EAAG: { app: "Business Manager", tone: "info", ads: true, use: "Бизнес-активы: страницы, Instagram, лиды, WhatsApp, каталоги и реклама." },
-  EAAH: { app: "Commerce Manager", tone: "info", ads: false, use: "Каталоги: товары и расширенное управление." },
-  EAAd: { app: "Events Manager", tone: "info", ads: false, use: "События: пиксели, датасеты и отслеживание." },
-  EAAI: { app: "Automated Rules", tone: "info", ads: true, use: "Настройка автоправил." },
+  EAAB: { app: "Ads Manager", tone: "ok", ads: true },
+  EAAG: { app: "Business Manager", tone: "info", ads: true },
+  EAAH: { app: "Commerce Manager", tone: "info", ads: false },
+  EAAd: { app: "Events Manager", tone: "info", ads: false },
+  EAAI: { app: "Automated Rules", tone: "info", ads: true },
 };
 // Every grabbed value already matched the token regex, so it IS a token — just from an app we didn't
 // hardcode. "Проверить" reads the real app from Graph, so keep this calm, not "это не токен".
-const UNKNOWN_KIND = { app: "Другое приложение Meta", tone: "info", use: "Нажми «Проверить» — покажу приложение и права." };
+const UNKNOWN_KIND = { tone: "info" };                  // app / use come from t("kind.unknown.*")
 // Friendly names for the first-party apps behind the tokens (shown after «Проверить»).
 const KNOWN_APPS = {
   "119211728144504": "Ads Manager", "436761779744620": "Business Manager",
@@ -47,14 +49,14 @@ const KNOWN_APPS = {
   "624541620938530": "Automated Rules",
 };
 const ADS_MANAGER_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns";
-// Which FB surface the tab is on, from host + path.
+// Which FB surface the tab is on, from host + path. App names as-is; the two translated ones are t() keys.
 function surfaceOf(host = "", path = "") {
   if (host.startsWith("adsmanager.")) return "Ads Manager";
-  if (/account_billing|\/billing/.test(path)) return "Биллинг";
+  if (/account_billing|\/billing/.test(path)) return "surface.billing";
   if (host.startsWith("business.")) {
     if (path.startsWith("/commerce")) return "Commerce Manager";
     if (path.startsWith("/events_manager")) return "Events Manager";
-    if (path.startsWith("/settings") || path.startsWith("/latest/settings")) return "Настройки БМ";
+    if (path.startsWith("/settings") || path.startsWith("/latest/settings")) return "surface.bm";
     if (path.includes("/adsmanager")) return "Ads Manager (Business Suite)";
     return "Business Suite";
   }
@@ -77,30 +79,18 @@ const OPTIONAL_FIELDS = {
 };
 // Spend periods. Meta's last_7d / last_30d end yesterday (today excluded). "all" = lifetime amount_spent.
 const PERIODS = [
-  { key: "today", label: "Сегодня", alias: "p_today" },
-  { key: "yesterday", label: "Вчера", alias: "p_yesterday" },
-  { key: "week", label: "7 дней", alias: "p_week" },
-  { key: "month", label: "30 дней", alias: "p_month" },
-  { key: "all", label: "Всё время" },
+  { key: "today", label: "period.today", alias: "p_today" },
+  { key: "yesterday", label: "period.yesterday", alias: "p_yesterday" },
+  { key: "week", label: "period.week", alias: "p_week" },
+  { key: "month", label: "period.month", alias: "p_month" },
+  { key: "all", label: "period.all" },
 ];
 
-const ACCOUNT_STATUS = {
-  1: ["Активен", "ok"], 2: ["Заблокирован", "bad"], 3: ["Не оплачен", "warn"],
-  7: ["Проверка риска", "warn"], 8: ["Ожидает оплаты", "warn"], 9: ["Льготный период", "warn"],
-  100: ["Закрывается", "bad"], 101: ["Закрыт", "bad"],
-};
-const DISABLE_REASON = {
-  1: "Правила рекламы / Integrity", 2: "Проверка IP", 3: "Платёжный риск", 4: "Серый аккаунт закрыт",
-  5: "Проверка AFC", 6: "Integrity бизнеса", 7: "Закрыт навсегда", 8: "Неиспользуемый реселлер",
-  9: "Неиспользуемый кабинет", 10: "Umbrella-кабинет", 11: "Правила БМ", 12: "Искажённые данные",
-  13: "Юрлицо отозвано", 14: "Проверка переписки", 15: "Кабинет взломан",
-};
+// Tone per Meta status code; the label is t("status.<code>") / t("ad.<status>"), disable reasons t("reason.<n>").
+const ACCOUNT_STATUS = { 1: "ok", 2: "bad", 3: "warn", 7: "warn", 8: "warn", 9: "warn", 100: "bad", 101: "bad" };
 const AD_STATUS = {
-  ACTIVE: ["Активно", "ok"], PAUSED: ["Пауза", ""], PENDING_REVIEW: ["На проверке", "warn"],
-  IN_PROCESS: ["Обработка", "warn"], DISAPPROVED: ["Отклонено", "bad"], WITH_ISSUES: ["С ошибками", "bad"],
-  CAMPAIGN_PAUSED: ["Кампания на паузе", ""], ADSET_PAUSED: ["Группа на паузе", ""],
-  PREAPPROVED: ["Предодобрено", "warn"], PENDING_BILLING_INFO: ["Нужна оплата", "warn"],
-  DELETED: ["Удалено", ""], ARCHIVED: ["Архив", ""],
+  ACTIVE: "ok", PAUSED: "", PENDING_REVIEW: "warn", IN_PROCESS: "warn", DISAPPROVED: "bad", WITH_ISSUES: "bad",
+  CAMPAIGN_PAUSED: "", ADSET_PAUSED: "", PREAPPROVED: "warn", PENDING_BILLING_INFO: "warn", DELETED: "", ARCHIVED: "",
 };
 
 const state = {
@@ -126,9 +116,9 @@ function toast(msg, err = false) {
   clearTimeout(toast._t);
   toast._t = setTimeout(() => t.classList.remove("show"), 2600);
 }
-async function copy(text, label = "Скопировано") {
+async function copy(text, label = t("copied")) {
   try { await navigator.clipboard.writeText(text); toast(label); return true; }
-  catch { toast("Не удалось скопировать в буфер", true); return false; }
+  catch { toast(t("copyFail"), true); return false; }
 }
 function el(tag, attrs = {}, ...children) {
   const n = document.createElement(tag);
@@ -150,15 +140,17 @@ const numEl = (text) => el("span", { class: "num" }, text);
 // Meta currencies without a minor-unit offset (amounts are whole units).
 const NO_OFFSET = new Set(["CLP", "COP", "CRC", "HUF", "ISK", "IDR", "JPY", "KRW", "PYG", "TWD", "VND"]);
 const major = (minor, cur) => Number(minor) / (NO_OFFSET.has(cur) ? 1 : 100);
-// Intl formatters are costly to build and run per row on every render (search, sort): one per currency / zone.
-const moneyFmts = new Map(), dayFmts = new Map();
+// Intl formatters are costly to build and run per row on every render (search, sort): one per currency / zone,
+// keyed by the UI locale too, so a language switch just starts filling new entries.
+const moneyFmts = new Map(), dayFmts = new Map(), numFmts = new Map();
+const numFmt = () => { const l = locale(); if (!numFmts.has(l)) numFmts.set(l, new Intl.NumberFormat(l)); return numFmts.get(l); };
 function fmt(value, cur) {
-  const c = cur || "USD";
-  if (!moneyFmts.has(c)) {
-    try { moneyFmts.set(c, new Intl.NumberFormat("ru-RU", { style: "currency", currency: c, maximumFractionDigits: 2 })); }
-    catch { moneyFmts.set(c, null); }                // unknown currency code → plain number + code
+  const c = cur || "USD", k = `${locale()}:${c}`;
+  if (!moneyFmts.has(k)) {
+    try { moneyFmts.set(k, new Intl.NumberFormat(locale(), { style: "currency", currency: c, maximumFractionDigits: 2 })); }
+    catch { moneyFmts.set(k, null); }                // unknown currency code → plain number + code
   }
-  const f = moneyFmts.get(c);
+  const f = moneyFmts.get(k);
   return f ? f.format(value) : `${Number(value).toFixed(2)} ${cur || ""}`;
 }
 function money(minor, cur) {
@@ -167,7 +159,7 @@ function money(minor, cur) {
 }
 function ago(ts) {
   const m = Math.round((Date.now() - ts) / 60000);
-  return m < 1 ? "только что" : m < 60 ? `${m} мин назад` : `${Math.round(m / 60)} ч назад`;
+  return m < 1 ? t("ago.now") : m < 60 ? t("ago.min", { n: m }) : t("ago.h", { n: Math.round(m / 60) });
 }
 function dayIn(tz, ts) {
   let f = dayFmts.get(tz);
@@ -276,7 +268,7 @@ function setUsage(headers) {
 function renderUsage() {
   const u = $("#usage");
   const cd = state.cooldownUntil - Date.now();
-  if (cd > 0) { u.textContent = `Пауза ${Math.ceil(cd / 60000)} мин`; u.className = "pill bad"; return; }
+  if (cd > 0) { u.textContent = t("usage.pause", { n: Math.ceil(cd / 60000) }); u.className = "pill bad"; return; }
   if (state.usage === null || state.usage < 50) { u.className = "pill hidden"; return; }
   u.textContent = `API ${Math.round(state.usage)}%`;
   u.className = `pill ${state.usage >= 75 ? "bad" : "warn"}`;
@@ -291,9 +283,9 @@ function startCooldown() {
 // retried: already re-sent once after #2635 moved us to a newer API version.
 async function graph(path, params = {}, retried = false) {
   const token = state.token, gen = state.gen, ctl = state.ctl;
-  if (!token) throw new Error("Сначала возьми токен");
+  if (!token) throw new Error(t("err.noToken"));
   const left = state.cooldownUntil - Date.now();
-  if (left > 0) throw new Error(`Пауза после лимита API ещё ${Math.ceil(left / 60000)} мин — не трогаем`);
+  if (left > 0) throw new Error(t("err.cooldown", { n: Math.ceil(left / 60000) }));
   const qs = new URLSearchParams(params).toString();
   const url = `${GRAPH_URL}${state.apiVersion}/${path}${qs ? `?${qs}` : ""}`;
   const signal = AbortSignal.any([ctl.signal, AbortSignal.timeout(TIMEOUT_MS)]);
@@ -302,29 +294,29 @@ async function graph(path, params = {}, retried = false) {
     res = await fetchFromPopup(url, token, signal);
   } catch (e) {
     if (ctl.signal.aborted || gen !== state.gen) throw new Stale();
-    if (e.name === "TimeoutError" || e.name === "AbortError") throw new Error(`Graph не ответил за ${TIMEOUT_MS / 1000} с`);
-    throw new Error(`Сеть: ${e.message}`);
+    if (e.name === "TimeoutError" || e.name === "AbortError") throw new Error(t("err.timeout", { n: TIMEOUT_MS / 1000 }));
+    throw new Error(t("err.net", { m: e.message }));
   }
   // The throttle pause applies even to a stale response: the limit is real either way.
   const e = res.body?.error;
   if (res.status === 429 || (e && (THROTTLE_CODES.has(e.code) || (e.code >= 80000 && e.code <= 80999)))) {
     startCooldown();
-    throw new Error(`Лимит API (${e ? `код ${e.code}` : "HTTP 429"}). Пауза 30 мин, повторять нельзя`);
+    throw new Error(t("err.limit", { c: e ? t("err.code", { c: e.code }) : "HTTP 429" }));
   }
   if (gen !== state.gen) throw new Stale();
   setUsage(res.headers);
   adoptVersion(res.headers?.get("x-ad-api-version-warning"));   // auto-upgraded: use the new one next time
   if (e?.code === DEPRECATED_VERSION_CODE) {
     if (!retried && adoptVersion(e.message)) return graph(path, params, true);
-    throw new Error(`Версия Graph API ${state.apiVersion} устарела, а новую Graph не назвал — обнови расширение (API_VERSION в popup.js)`);
+    throw new Error(t("err.version", { v: state.apiVersion }));
   }
   if (e) {
-    const err = new Error(e.error_user_msg || e.message || "Ошибка Graph");
+    const err = new Error(e.error_user_msg || e.message || t("err.graph"));
     err.code = e.code; err.subcode = e.error_subcode; err.raw = e.message || "";
     throw err;
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  if (!res.body || typeof res.body !== "object") throw new Error("Пустой ответ Graph");
+  if (!res.body || typeof res.body !== "object") throw new Error(t("err.empty"));
   return res.body;
 }
 
@@ -399,7 +391,7 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
   };
   const tabs = await facebookTabs();
   if (!current()) return null;
-  if (!tabs.length) return none("Открой Facebook в этом профиле");
+  if (!tabs.length) return none(t("grab.noTab"));
   // The first tab that has a token wins: the active FB tab may be a page without one (feed, still loading).
   let pick = null, src = null, read = [];
   for (const tab of tabs.slice(0, 5)) {
@@ -412,8 +404,8 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
     pick = pickToken(r);
     if (pick) { src = r; break; }
   }
-  if (!read.length) return none("Нет доступа к вкладке FB — обнови её");
-  if (!pick) return none(`Токен не найден на ${read.length === 1 ? String(read[0].host || "этой вкладке") : "открытых вкладках Facebook"}`);
+  if (!read.length) return none(t("grab.noAccess"));
+  if (!pick) return none(t("grab.notFound", { where: read.length === 1 ? String(read[0].host || t("grab.thisTab")) : t("grab.openTabs") }));
   if (pick !== state.token) {
     newGeneration();
     gen = state.gen;                                   // our own bump, not a reset
@@ -428,42 +420,43 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
   if (!current()) return null;
   renderToken();
   if (toClipboard) {
-    const ok = await copy(pick, "Токен скопирован");
+    const ok = await copy(pick, t("grab.copied"));
     // Only warn for a token we know can't launch ads (EAAH/EAAd); ads-capable and unknown stay quiet.
-    if (ok && TOKEN_KIND[pick.slice(0, 4)]?.ads === false) toast(`Скопирован ${pick.slice(0, 4)} — рекламу не запускает`);
+    if (ok && TOKEN_KIND[pick.slice(0, 4)]?.ads === false) toast(t("grab.notAds", { k: pick.slice(0, 4) }));
   }
   return pick;
 }
 function renderToken(hint) {
-  const t = state.token;
+  const tok = state.token;
   // Full token, one line; the field clips whatever runs past its right edge.
-  $("#tokenBox").textContent = t || hint || "—";
-  $("#tokenBox").classList.toggle("filled", !!t);
-  $("#checkToken").disabled = !t;
+  $("#tokenBox").textContent = tok || hint || "—";
+  $("#tokenBox").classList.toggle("filled", !!tok);
+  $("#checkToken").disabled = !tok;
   // Card under the field: the current token's badge/app/use. For a token that can't launch ads we add
   // the "not an ads token · open Ads Manager" hint; ads-capable tokens (EAAB/EAAG/EAAI) don't get it.
   // With no token grabbed we still show a bare Ads Manager link — that's where the ads token lives.
   const card = $("#kindCard");
   const adsLink = (lead) => el("div", { class: "kind-ads" }, lead || null,
-    el("a", { href: ADS_MANAGER_URL, target: "_blank", rel: "noopener noreferrer" }, "Перейти в Ads Manager", el("i", { class: "i i-external" })));
+    el("a", { href: ADS_MANAGER_URL, target: "_blank", rel: "noopener noreferrer" }, t("kind.goAds"), el("i", { class: "i i-external" })));
   card.classList.remove("hidden");
-  if (!t) { card.className = "kind"; card.title = ""; return fill(card, adsLink()); }
-  const kind = t.slice(0, 4);
+  if (!tok) { card.className = "kind"; card.title = ""; return fill(card, adsLink()); }
+  const kind = tok.slice(0, 4);
   const k = TOKEN_KIND[kind] || UNKNOWN_KIND;
   card.className = `kind ${k.tone}`;
-  card.title = state.tokenSource?.surface ? `Взят со вкладки: ${state.tokenSource.surface}` : "";
+  const surf = state.tokenSource?.surface;
+  card.title = surf ? t("kind.from", { s: surf.startsWith("surface.") ? t(surf) : surf }) : "";
   fill(card,
-    el("div", { class: "kind-head" }, el("span", { class: "kind-badge" }, kind), el("span", { class: "kind-app" }, k.app)),
-    el("div", { class: "kind-use" }, k.use),
+    el("div", { class: "kind-head" }, el("span", { class: "kind-badge" }, kind), el("span", { class: "kind-app" }, k.app || t("kind.unknown.app"))),
+    el("div", { class: "kind-use" }, k.app ? t(`kind.${kind}`) : t("kind.unknown.use")),
     // ads-capable → nothing; known non-ads → "not an ads token" + link; unknown → bare link only.
-    k.ads === true ? null : adsLink(k.ads === false ? "Сейчас это не рекламный токен. " : null),
+    k.ads === true ? null : adsLink(k.ads === false ? t("kind.notAds") : null),
   );
 }
 async function checkToken() {
   const box = $("#tokenInfo");
   const btn = $("#checkToken");
   box.classList.remove("hidden");
-  fill(box, el("dt", {}, "Проверка"), el("dd", {}, "…"));
+  fill(box, el("dt", {}, t("check.checking")), el("dd", {}, "…"));
   btn.disabled = true;
   try {
     const me = await graph("me", { fields: "id,name" });
@@ -475,12 +468,12 @@ async function checkToken() {
     const need = ["ads_read", "ads_management", "business_management"];
     let permsDd, grantedCount = null;
     // A reply without a data array is "couldn't check", not "no permissions".
-    if (!perms.err && !Array.isArray(perms.v?.data)) perms.err = new Error("неожиданный ответ Graph (нет data)");
+    if (!perms.err && !Array.isArray(perms.v?.data)) perms.err = new Error(t("check.badPerms"));
     // Events / Commerce Manager tokens can't read their own /me/permissions (#10). That's the token
     // type, not an error — say so plainly instead of a red failure.
     if (perms.err && perms.err.code === 10)
-      permsDd = el("span", { class: "hint" }, "Токен этого приложения не отдаёт список прав — это нормально для Events и Commerce Manager. Что он умеет — видно в блоке «Типы токенов».");
-    else if (perms.err) permsDd = errText(`не удалось проверить: ${perms.err.message}`);
+      permsDd = el("span", { class: "hint" }, t("check.noPerms"));
+    else if (perms.err) permsDd = errText(t("check.failed", { m: perms.err.message }));
     else {
       // Every granted scope (the set is fixed by the Meta app the token came from), plus the
       // ads scopes that are missing in red. Green = granted.
@@ -489,21 +482,21 @@ async function checkToken() {
       const missing = need.filter((p) => !granted.includes(p));
       // Collapsed by default: the three ads scopes as pills, the full list (often 80+) behind a toggle.
       permsDd = el("div", { class: "perms" },
-        el("div", { class: "chips" }, need.map((p) => pill(missing.includes(p) ? `нет ${p}` : p, missing.includes(p) ? "bad" : "ok"))),
+        el("div", { class: "chips" }, need.map((p) => pill(missing.includes(p) ? t("check.missing", { p }) : p, missing.includes(p) ? "bad" : "ok"))),
         granted.length ? el("details", { class: "more" },
           el("summary", {}, el("i", { class: "i i-chevron" }),
-            el("span", { class: "when-closed" }, `Все права · ${granted.length}`), el("span", { class: "when-open" }, "Свернуть")),
+            el("span", { class: "when-closed" }, t("check.allPerms", { n: granted.length })), el("span", { class: "when-open" }, t("check.collapse"))),
           el("div", { class: "perm-list" }, granted.join(" · "))) : null);
     }
     fill(box,
-      el("dt", {}, "Профиль"), el("dd", {}, `${me.name} · `, numEl(me.id)),
-      el("dt", {}, "Приложение"), el("dd", {}, app.err ? errText(`не удалось проверить: ${app.err.message}`)
+      el("dt", {}, t("check.profile")), el("dd", {}, `${me.name} · `, numEl(me.id)),
+      el("dt", {}, t("check.app")), el("dd", {}, app.err ? errText(t("check.failed", { m: app.err.message }))
         : [`${app.v.name} · `, numEl(app.v.id), KNOWN_APPS[app.v.id] ? ` (${KNOWN_APPS[app.v.id]})` : ""]),
-      el("dt", {}, grantedCount === null ? "Права" : `Права (${grantedCount})`), el("dd", {}, permsDd),
+      el("dt", {}, grantedCount === null ? t("check.perms") : t("check.permsN", { n: grantedCount })), el("dd", {}, permsDd),
     );
   } catch (e) {
     if (e instanceof Stale) return;
-    fill(box, el("dt", {}, "Ошибка"), el("dd", {}, errText(e.message)));
+    fill(box, el("dt", {}, t("check.error")), el("dd", {}, errText(e.message)));
   } finally { btn.disabled = !state.token; }
 }
 
@@ -529,13 +522,13 @@ function renderCookies() {
   const box = $("#cookieBox");
   box.classList.toggle("filled", !!n);
   if (n) fill(box, el("div", { class: "ck-scroll" }, state.cookies.map((c) => `${c.name}=${c.value}`).join("; ")));
-  else box.textContent = "Cookie не найдены";
+  else box.textContent = t("ck.none");
   const xs = byName.xs;
-  const until = xs?.expirationDate ? new Date(xs.expirationDate * 1000).toLocaleDateString("ru-RU") : null;
+  const until = xs?.expirationDate ? new Date(xs.expirationDate * 1000).toLocaleDateString(locale()) : null;
   fill($("#cookieStatus"), hasSession()
-    ? [pill("Вход выполнен", "ok"), el("span", {}, until ? "сессия до " : "сессия до закрытия браузера",
+    ? [pill(t("ck.loggedIn"), "ok"), el("span", {}, until ? t("ck.until") : t("ck.untilClose"),
         until ? numEl(until) : null, " · ", numEl(n), " cookie")]
-    : [pill("Не залогинен в Facebook", "bad")]);
+    : [pill(t("ck.loggedOut"), "bad")]);
 }
 const cookieHeader = () => state.cookies.map((c) => `${c.name}=${c.value}`).join("; ");
 function cookiesJson() {
@@ -547,8 +540,8 @@ function cookiesJson() {
 }
 async function copyCookies(asJson) {
   await readCookies();
-  if (!hasSession()) return toast("Нет c_user / xs — залогинься в FB", true);
-  copy(asJson ? cookiesJson() : cookieHeader(), asJson ? "JSON скопирован" : "Cookie скопированы");
+  if (!hasSession()) return toast(t("ck.noSession"), true);
+  copy(asJson ? cookiesJson() : cookieHeader(), asJson ? t("ck.jsonCopied") : t("ck.copied"));
 }
 // ---------- token + cookie block ----------
 async function copyEnv() {
@@ -558,8 +551,8 @@ async function copyEnv() {
   const gen = state.gen;
   await readCookies();
   if (gen !== state.gen || state.token !== token) return;
-  if (!hasSession()) return toast("Нет c_user / xs — залогинься в FB", true);
-  copy(`${token}\n\n${cookieHeader()}`, "Токен + cookie скопированы");   // token, blank line, cookie header — nothing else
+  if (!hasSession()) return toast(t("ck.noSession"), true);
+  copy(`${token}\n\n${cookieHeader()}`, t("env.copied"));   // token, blank line, cookie header — nothing else
 }
 
 // ---------- accounts ----------
@@ -582,9 +575,9 @@ async function fetchAccounts() {
   const gen = state.gen;                              // fixed before waiting for the lock
   let wait;
   try { wait = await claimSlot("accounts"); }        // before sending: a failed attempt counts too
-  catch (e) { return toast(`Не удалось занять слот запроса: ${e.message}`, true); }
+  catch (e) { return toast(t("err.slot", { m: e.message }), true); }
   if (gen !== state.gen) return;                      // reset / new token while waiting
-  if (wait > 0) return toast(`Обновить можно через ${Math.ceil(wait / 1000)} с`, true);
+  if (wait > 0) return toast(t("acc.wait", { n: Math.ceil(wait / 1000) }), true);
   const btn = $("#loadAccounts");
   btn.disabled = true; btn.setAttribute("aria-busy", "true");
   try {
@@ -599,7 +592,7 @@ async function fetchAccounts() {
         if (k) { state.skip.add(k); continue; }       // same page again without that field
         throw e;
       }
-      if (!Array.isArray(page.data)) throw new Error("Неожиданный ответ Graph (нет data)");
+      if (!Array.isArray(page.data)) throw new Error(t("err.noData"));
       rows.push(...page.data.map(slim));
       after = page.paging?.next ? page.paging.cursors?.after : null;
       pages++;
@@ -613,7 +606,7 @@ async function fetchAccounts() {
     Object.assign(state, { accounts: rows, fetchedAt: Date.now(), truncated: !!after, owner });
     await saveSession({ accounts: rows, fetchedAt: state.fetchedAt, truncated: state.truncated, owner, ads: state.ads });
     saveView();
-    toast(`Кабинетов: ${rows.length}${after ? " (не все — лимит 10 страниц)" : ""}`);
+    toast(t("acc.loaded", { n: rows.length }) + (after ? t("acc.truncated") : ""));
   } catch (e) {
     if (!(e instanceof Stale)) toast(e.message, true);
   } finally {
@@ -635,12 +628,16 @@ function statsOf(a, key = state.period) {
   if (!Number.isFinite(spend)) return null;
   return { spend, imp: Number(r.impressions) || 0, clicks: Number(r.inline_link_clicks) || 0, from: r.date_start, to: r.date_stop };
 }
-const shortDate = (d) => (d ? `${d.slice(8, 10)}.${d.slice(5, 7)}` : "");
+// "29.08" in Russian, "Aug 29" in English (d = YYYY-MM-DD from Graph).
+const shortDate = (d) => {
+  if (!d) return "";
+  if (getLang() === "ru") return `${d.slice(8, 10)}.${d.slice(5, 7)}`;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${d}T00:00:00Z`));
+};
 function periodRange() {
-  for (const a of state.accounts) { const t = statsOf(a); if (t?.from) return t.from === t.to ? shortDate(t.from) : `${shortDate(t.from)}–${shortDate(t.to)}`; }
+  for (const a of state.accounts) { const s = statsOf(a); if (s?.from) return s.from === s.to ? shortDate(s.from) : `${shortDate(s.from)}–${shortDate(s.to)}`; }
   return "";
 }
-const nf = new Intl.NumberFormat("ru-RU");
 // One format for every account timezone: "UTC+3 · Kiev", "UTC−3". Meta stores some as city names
 // (Europe/Kiev) and some as Etc/GMT±N, whose sign is inverted (Etc/GMT+3 = UTC−3); Intl resolves both.
 const tzLabels = new Map();
@@ -660,10 +657,6 @@ function tzLabelOf(tz) {
   const city = tz.includes("/") && !tz.startsWith("Etc/") ? tz.split("/").pop().replace(/_/g, " ") : "";
   return city ? `${off} · ${city}` : off;
 }
-const plural = (n, one, few, many) => {
-  const m10 = n % 10, m100 = n % 100;
-  return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
-};
 // Rows matching the search + status filter. The total, the count and "ID активных" all follow it.
 function visibleRows() {
   const q = state.filter.trim().toLowerCase();
@@ -676,16 +669,20 @@ function visibleRows() {
 const isFiltered = () => !!(state.filter.trim() || state.statusFilter);
 function copyLiveIds() {
   const ids = visibleRows().filter((a) => a.account_status === 1).map((a) => a.account_id);
-  if (!ids.length) return toast("Активных кабинетов нет", true);
-  copy(ids.join("\n"), `Скопировано ID: ${ids.length}${state.truncated ? " (список неполный)" : ""}`);
+  if (!ids.length) return toast(t("acc.noLive"), true);
+  copy(ids.join("\n"), t("acc.idsCopied", { n: ids.length }) + (state.truncated ? t("acc.partial") : ""));
 }
-function accStatus(a) { return ACCOUNT_STATUS[a.account_status] || [`Статус ${a.account_status}`, "warn"]; }
+// [label, tone] for an account; unknown codes are shown as their number.
+function accStatus(a) {
+  const c = a.account_status;
+  return c in ACCOUNT_STATUS ? [t(`status.${c}`), ACCOUNT_STATUS[c]] : [t("status.other", { n: c }), "warn"];
+}
 function renderHint() {
   const total = $("#accountsTotal");
   if (!state.fetchedAt) return fill(total);
   const all = state.accounts.length, rows = visibleRows(), n = rows.length;
-  const count = isFiltered() ? `найдено ${n} из ${all}` : `${all} ${plural(all, "кабинет", "кабинета", "кабинетов")}`;
-  const meta = el("span", { class: "total-meta" }, `${count}${state.truncated ? " (не все)" : ""} · обновлено ${ago(state.fetchedAt)}`);
+  const count = isFiltered() ? t("acc.found", { n, all }) : `${all} ${tn(all, "acc.count")}`;
+  const meta = el("span", { class: "total-meta" }, `${count}${state.truncated ? t("acc.notAll") : ""} · ${t("acc.updated", { t: ago(state.fetchedAt) })}`);
   if (!n) return fill(total, meta);
   const totals = {};
   let unknown = false;
@@ -695,14 +692,14 @@ function renderHint() {
     if (t.spend) totals[a.currency] = (totals[a.currency] || 0) + t.spend;
   }
   const sum = Object.entries(totals).map(([cur, v]) => fmt(v, cur)).join(" + ");
-  const label = PERIODS.find((p) => p.key === state.period).label;
+  const label = t(PERIODS.find((p) => p.key === state.period).label);
   const range = state.period === "all" ? "" : periodRange();
   // Row 1: what the number is (left) + how fresh / how many (right). Row 2: the number.
   fill(total,
-    el("span", { class: "total-label" }, `Спенд · ${label.toLowerCase()}${range ? ` · ${range}` : ""}`),
+    el("span", { class: "total-label" }, `${t("acc.spend")} · ${label.toLowerCase()}${range ? ` · ${range}` : ""}`),
     meta,
-    el("span", { class: "total-value" }, unknown && !sum ? "— обнови" : sum || fmt(0, rows[0].currency),
-      unknown && sum ? el("small", { title: "По части кабинетов нет данных за период — обнови список" }, "не по всем") : null),
+    el("span", { class: "total-value" }, unknown && !sum ? t("acc.refreshDash") : sum || fmt(0, rows[0].currency),
+      unknown && sum ? el("small", { title: t("acc.notAllTitle") }, t("acc.notAllShort")) : null),
   );
 }
 // Re-rendering replaces nodes: put keyboard focus back on the control with the same data-focus key.
@@ -714,9 +711,9 @@ function keepFocus(render) {
 function renderPeriods() {
   keepFocus(() => fill($("#periodSeg"), ...PERIODS.map((p) => el("button", {
     class: `seg-btn${p.key === state.period ? " active" : ""}`, "aria-pressed": String(p.key === state.period), "data-focus": `period:${p.key}`,
-    title: p.key === "week" || p.key === "month" ? "Без сегодняшнего дня" : null,
+    title: p.key === "week" || p.key === "month" ? t("period.noToday") : null,
     onclick: () => { state.period = p.key; try { localStorage.setItem("period", p.key); } catch { /* */ } renderPeriods(); renderAccounts(); },
-  }, p.label))));
+  }, t(p.label)))));
 }
 function renderAccounts() { keepFocus(drawAccounts); }
 function drawAccounts() {
@@ -729,14 +726,14 @@ function drawAccounts() {
   // A status filter is only useful when statuses differ; with one status it just repeats the count.
   if (Object.keys(counts).length < 2) { state.statusFilter = null; for (const k of Object.keys(counts)) delete counts[k]; }
   fill($("#statusChips"), ...Object.entries(counts).map(([label, n]) => {
-    const tone = Object.values(ACCOUNT_STATUS).find(([l]) => l === label)?.[1] || "";
+    const tone = Object.entries(ACCOUNT_STATUS).find(([c]) => t(`status.${c}`) === label)?.[1] || "";
     const on = state.statusFilter === label;
     return el("button", { class: `pill chip ${tone}${on ? " on" : ""}`, "aria-pressed": String(on), "data-focus": `chip:${label}`,
       onclick: () => { state.statusFilter = on ? null : label; renderAccounts(); } }, `${label} ${n}`);
   }));
   const rows = visibleRows();
-  if (!state.accounts.length) return fill(list, el("div", { class: "empty" }, "Кабинеты не загружены"));
-  if (!rows.length) return fill(list, el("div", { class: "empty" }, "Ничего не найдено"));
+  if (!state.accounts.length) return fill(list, el("div", { class: "empty" }, t("acc.empty")));
+  if (!rows.length) return fill(list, el("div", { class: "empty" }, t("acc.noMatch")));
   // Stats once per row: the sort comparator would otherwise recompute them O(n log n) times.
   const stats = new Map(rows.map((a) => [a, statsOf(a)]));
   const spendOf = (a) => stats.get(a)?.spend ?? -1;
@@ -762,45 +759,45 @@ function renderAccount(a, st) {
   // it holds the copy-ID button and the Ads Manager link, and interactive controls must not nest.
   const title = el("button", { type: "button", class: "acc-title", "aria-expanded": String(isOpen), "data-focus": `acc:${a.account_id}` },
     el("i", { class: "i i-chevron", "aria-hidden": "true" }),
-    el("span", { class: "acc-name", title: a.name }, a.name || "Без имени"));
+    el("span", { class: "acc-name", title: a.name }, a.name || t("acc.noName")));
   const head = el("div", { class: "acc-head", onclick: toggle },
     title,
     pill(label, tone),
     el("div", { class: "acc-ids" },
-      el("button", { class: "acc-id", title: "Копировать ID", "data-focus": `id:${a.account_id}`,
-                     onclick: (ev) => { ev.stopPropagation(); copy(a.account_id, "ID скопирован"); } },
+      el("button", { class: "acc-id", title: t("acc.copyId"), "data-focus": `id:${a.account_id}`,
+                     onclick: (ev) => { ev.stopPropagation(); copy(a.account_id, t("acc.idCopied")); } },
          a.account_id, el("i", { class: "i i-copy" })),
       // Open in Ads Manager straight from the collapsed row; must not toggle the row.
-      el("a", { class: "acc-link", title: "Открыть в Ads Manager", "aria-label": "Открыть в Ads Manager", target: "_blank", rel: "noopener noreferrer", "data-focus": `link:${a.account_id}`,
+      el("a", { class: "acc-link", title: t("acc.openAds"), "aria-label": t("acc.openAds"), target: "_blank", rel: "noopener noreferrer", "data-focus": `link:${a.account_id}`,
                 href: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${a.account_id}`,
                 onclick: (ev) => ev.stopPropagation() }, el("i", { class: "i i-external" }))),
     st ? el("div", { class: "acc-spend" }, fmt(st.spend, cur))
-       : el("div", { class: "acc-spend muted", title: "Нет данных за этот период — обнови список" }, "—"),  // .acc-spend uses the number font in CSS
+       : el("div", { class: "acc-spend muted", title: t("acc.noPeriod") }, "—"),  // .acc-spend uses the number font in CSS
     el("div", { class: "acc-meta" },
       a.business
-        ? el("span", { class: "owner", title: `Кабинет в БМ ${a.business.name} · ${a.business.id}` }, el("i", { class: "i i-bm" }), `БМ ${a.business.name}`)
-        : el("span", { class: "owner", title: "Личный кабинет: Graph не вернул БМ-владельца" }, el("i", { class: "i i-user" }), "Личный"),
-      a.timezone_name ? el("span", { title: `Часовой пояс кабинета: ${a.timezone_name}` }, tzLabel(a.timezone_name)) : null,
-      a.disable_reason ? el("span", { class: "err-text" }, `${DISABLE_REASON[a.disable_reason] || "Причина"} (${a.disable_reason})`) : null),
+        ? el("span", { class: "owner", title: t("acc.inBm", { n: a.business.name, id: a.business.id }) }, el("i", { class: "i i-bm" }), t("acc.bm", { n: a.business.name }))
+        : el("span", { class: "owner", title: t("acc.personalTitle") }, el("i", { class: "i i-user" }), t("acc.personal")),
+      a.timezone_name ? el("span", { title: t("acc.tz", { tz: a.timezone_name }) }, tzLabel(a.timezone_name)) : null,
+      a.disable_reason ? el("span", { class: "err-text" }, `${has(`reason.${a.disable_reason}`) ? t(`reason.${a.disable_reason}`) : t("reason.other")} (${a.disable_reason})`) : null),
     st && st.imp !== null && (st.imp || st.clicks)
-      ? el("div", { class: "acc-sub", title: `${nf.format(st.imp)} показов` },
-          numEl(nf.format(st.clicks)), " кликов", cpc !== null ? [" · CPC ", numEl(fmt(cpc, cur))] : null)
+      ? el("div", { class: "acc-sub", title: t("acc.imp", { n: numFmt().format(st.imp) }) },
+          numEl(numFmt().format(st.clicks)), t("acc.clicks"), cpc !== null ? [" · CPC ", numEl(fmt(cpc, cur))] : null)
       : el("div", { class: "acc-sub" }),
   );
   const adsBox = el("div", { class: "ads", "data-ads-box": a.account_id });
   const pixels = a.adspixels?.data;
   const body = el("div", { class: "acc-body" },
     el("dl", { class: "kv" },
-      el("dt", {}, "Всего потрачено"), el("dd", {}, numEl(money(a.amount_spent, cur))),
-      el("dt", {}, "Не оплачено"), el("dd", {}, numEl(money(a.balance, cur))),
-      el("dt", {}, "Порог списания"), el("dd", {}, threshold !== undefined ? numEl(money(threshold, cur)) : "—"),
-      el("dt", {}, "Лимит в день"), el("dd", {}, dsl === undefined ? "—" : Number(dsl) < 0 ? "без лимита" : numEl(fmt(Number(dsl), cur))),
-      el("dt", {}, "Spend cap"), el("dd", {}, Number(a.spend_cap || 0) ? numEl(money(a.spend_cap, cur)) : "нет"),
-      el("dt", {}, "Оплата"), el("dd", {}, a.funding_source_details?.display_string || "—"),
-      el("dt", {}, "Пиксели"), el("dd", {}, a._noPixels ? "—"
-        : pixels?.length ? pixels.flatMap((p, i) => [i ? ", " : null, p.name, " · ", numEl(p.id)]) : pill("нет пикселя", "warn")),
-      el("dt", {}, "Владелец"), el("dd", {}, a.business ? ["БМ ", a.business.name, " · ", numEl(a.business.id)] : "без БМ"),
-      el("dt", {}, "Страна / создан"), el("dd", {}, a.business_country_code || "—", " · ", a.created_time ? numEl(a.created_time.slice(0, 10)) : "—"),
+      el("dt", {}, t("acc.spent")), el("dd", {}, numEl(money(a.amount_spent, cur))),
+      el("dt", {}, t("acc.balance")), el("dd", {}, numEl(money(a.balance, cur))),
+      el("dt", {}, t("acc.threshold")), el("dd", {}, threshold !== undefined ? numEl(money(threshold, cur)) : "—"),
+      el("dt", {}, t("acc.daily")), el("dd", {}, dsl === undefined ? "—" : Number(dsl) < 0 ? t("acc.noLimit") : numEl(fmt(Number(dsl), cur))),
+      el("dt", {}, t("acc.spendCap")), el("dd", {}, Number(a.spend_cap || 0) ? numEl(money(a.spend_cap, cur)) : t("acc.no")),
+      el("dt", {}, t("acc.funding")), el("dd", {}, a.funding_source_details?.display_string || "—"),
+      el("dt", {}, t("acc.pixels")), el("dd", {}, a._noPixels ? "—"
+        : pixels?.length ? pixels.flatMap((p, i) => [i ? ", " : null, p.name, " · ", numEl(p.id)]) : pill(t("acc.noPixel"), "warn")),
+      el("dt", {}, t("acc.owner")), el("dd", {}, a.business ? [t("acc.bmPrefix"), a.business.name, " · ", numEl(a.business.id)] : t("acc.noBm")),
+      el("dt", {}, t("acc.country")), el("dd", {}, a.business_country_code || "—", " · ", a.created_time ? numEl(a.created_time.slice(0, 10)) : "—"),
     ),
     adsControls(a.account_id),
     adsBox,
@@ -824,32 +821,33 @@ function reviewText(fb) {
 function adsControls(id) {
   const data = state.ads[id];
   if (!data) return el("div", { class: "actions" },
-    el("button", { class: "btn sm", "data-ads": id, "data-focus": `ads:${id}`, disabled: adsBlocked(id), onclick: () => loadAds(id) }, "Объявления"));
+    el("button", { class: "btn sm", "data-ads": id, "data-focus": `ads:${id}`, disabled: adsBlocked(id), onclick: () => loadAds(id) }, t("ads.btn")));
   const hidden = state.adsHidden.has(id);
   const n = data.ads?.length || 0;
   return el("div", { class: "actions" },
     el("button", { class: "btn sm", "aria-expanded": String(!hidden), "data-focus": `adsToggle:${id}`, onclick: () => {
       state.adsHidden[hidden ? "delete" : "add"](id); saveView(); renderAccounts();
-    } }, el("i", { class: `i i-chevron${hidden ? "" : " up"}` }), hidden ? `Объявления${data.error ? "" : ` · ${n}`}` : "Свернуть объявления"),
-    el("button", { class: "icon-btn sm", "data-ads": id, "data-focus": `ads:${id}`, disabled: adsBlocked(id), title: "Обновить объявления",
-                   "aria-label": "Обновить объявления", onclick: () => loadAds(id) }, el("i", { class: "i i-refresh" })));
+    } }, el("i", { class: `i i-chevron${hidden ? "" : " up"}` }), hidden ? `${t("ads.btn")}${data.error ? "" : ` · ${n}`}` : t("ads.collapse")),
+    el("button", { class: "icon-btn sm", "data-ads": id, "data-focus": `ads:${id}`, disabled: adsBlocked(id), title: t("ads.refresh"),
+                   "aria-label": t("ads.refresh"), onclick: () => loadAds(id) }, el("i", { class: "i i-refresh" })));
 }
 function renderAds(box, { ads, more, error }) {
   if (!box) return;
   const id = box.dataset.adsBox;
   if (state.adsHidden.has(id)) return fill(box);
   if (error) return fill(box, el("div", { class: "hint err-text" }, error));
-  if (!ads.length) return fill(box, el("div", { class: "hint" }, "Объявлений нет"));
+  if (!ads.length) return fill(box, el("div", { class: "hint" }, t("ads.none")));
   const count = (st) => ads.filter((ad) => st.includes(ad.effective_status)).length;
   const live = count(["ACTIVE"]), rejected = count(["DISAPPROVED", "WITH_ISSUES"]);
   fill(box, el("div", { class: "ads-sum" },
-      `${ads.length}${more ? "+" : ""} ${plural(ads.length, "объявление", "объявления", "объявлений")}`,
-      live ? ` · ${live} активно` : "", rejected ? el("span", { class: "err-text" }, ` · ${rejected} отклонено`) : ""),
+      `${ads.length}${more ? "+" : ""} ${tn(ads.length, "ads.count")}`,
+      live ? t("ads.live", { n: live }) : "", rejected ? el("span", { class: "err-text" }, t("ads.rejected", { n: rejected })) : ""),
     ...ads.map((ad) => {
-    const [l, t] = AD_STATUS[ad.effective_status] || [ad.effective_status, ""];
+    const st = ad.effective_status;
+    const [l, tone] = st in AD_STATUS ? [t(`ad.${st}`), AD_STATUS[st]] : [st, ""];
     const reasons = reviewText(ad.ad_review_feedback);
-    return el("div", { class: "ad" }, el("span", {}, ad.name), pill(l, t), reasons ? el("small", {}, reasons) : null);
-  }), ...(more ? [el("div", { class: "hint" }, `Показаны первые ${ads.length} — остальное в Ads Manager`)] : []));
+    return el("div", { class: "ad" }, el("span", {}, ad.name), pill(l, tone), reasons ? el("small", {}, reasons) : null);
+  }), ...(more ? [el("div", { class: "hint" }, t("ads.more", { n: ads.length }))] : []));
 }
 async function loadAds(id) {
   if (state.adsBusy.has(id)) return;
@@ -859,19 +857,19 @@ async function loadAds(id) {
   syncAdsButtons();
   let wait;
   try { wait = await claimSlot(id); }
-  catch (e) { busy.delete(id); syncAdsButtons(); return toast(`Не удалось занять слот запроса: ${e.message}`, true); }
+  catch (e) { busy.delete(id); syncAdsButtons(); return toast(t("err.slot", { m: e.message }), true); }
   if (gen !== state.gen) { busy.delete(id); return; } // reset / new token while waiting: old account list
   if (wait > 0) {
     busy.delete(id); syncAdsButtons();
-    return toast("Объявления этого кабинета можно запросить раз в 30 с", true);
+    return toast(t("ads.wait"), true);
   }
   syncAdsButtons();
   setTimeout(syncAdsButtons, ADS_LOCK_MS + 50);
   const box = adsBox(id);
-  if (box) fill(box, el("div", { class: "hint" }, "Загрузка…"));
+  if (box) fill(box, el("div", { class: "hint" }, t("ads.loading")));
   try {
     const res = await graph(`act_${id}/ads`, { fields: "name,effective_status,ad_review_feedback", limit: "100" });
-    if (!Array.isArray(res.data)) throw new Error("Неожиданный ответ Graph (нет data)");
+    if (!Array.isArray(res.data)) throw new Error(t("err.noData"));
     state.ads[id] = { ads: res.data, more: !!res.paging?.next };
   } catch (e) {
     if (e instanceof Stale) return;
@@ -894,7 +892,7 @@ async function clearSession() {
   await Promise.all([dropCache(), chrome.storage.session.remove(["token", "tokenSource", "usage"])]);
   $("#accountFilter").value = "";
   renderToken(); renderAccounts(); renderUsage();
-  toast("Токен и кэш удалены");
+  toast(t("reset.done"));
 }
 
 // ---------- wiring ----------
@@ -907,7 +905,20 @@ function switchTab(name) {
   try { localStorage.setItem("tab", name); } catch { /* */ }
 }
 
+// RU · EN in the header. Everything is redrawn from state; the token field is re-read from the FB tab (local),
+// the «Проверить» result is hidden (its text came from Graph in the old language — press again).
+async function switchLang(l) {
+  if (!(await setLang(l))) return;
+  state.statusFilter = null;                            // it holds a translated label
+  applyStatic();
+  $("#tokenInfo").classList.add("hidden");
+  renderToken(); renderPeriods(); renderAccounts(); renderUsage(); renderCookies();
+  grabToken({ toClipboard: false, silent: true });
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
+  await loadLang(); applyStatic();
+  $$("[data-lang]").forEach((b) => b.addEventListener("click", () => switchLang(b.dataset.lang)));
   await loadState();
   $$(".tab").forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
   // WAI-ARIA tabs: arrows / Home / End move between tabs; Tab key goes straight into the panel.
