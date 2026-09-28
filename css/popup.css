@@ -16,13 +16,10 @@
   --color-text-disabled: #BCC0C4;
   --color-border: #F0F2F5;
   --color-success: #2B8A3E;
-  --color-success-dot: #42B72A;
   --color-success-muted: #42B72A1F;
   --color-warning: #8A6100;
-  --color-warning-dot: #F7B928;
   --color-warning-muted: #F7B92829;
   --color-error: #D8232A;
-  --color-error-dot: #FA383E;
   --color-error-muted: #FA383E17;
 
   --spacing-1: 4px; --spacing-1-5: 6px; --spacing-2: 8px; --spacing-3: 12px; --spacing-4: 16px;
