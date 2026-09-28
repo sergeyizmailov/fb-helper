@@ -1,12 +1,14 @@
 # FB Helper 2.1.0
 
+[![CI](https://github.com/slilbudget/fb-helper/actions/workflows/ci.yml/badge.svg)](https://github.com/slilbudget/fb-helper/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/slilbudget/fb-helper)](https://github.com/slilbudget/fb-helper/releases/latest) [![License: MIT](https://img.shields.io/github/license/slilbudget/fb-helper)](LICENSE)
+
 ![FB Helper — token, cookies and ad accounts](docs/cover.png)
 
 Chrome extension (MV3): Facebook access token, session cookies and ad account status in one popup. Read-only — it never changes anything in your ads.
 
 ## Install
 
-1. **Code → Download ZIP** and unpack (or `git clone`)
+1. Download `fb-helper-2.1.0.zip` from [Releases](https://github.com/slilbudget/fb-helper/releases/latest) and unpack (or `git clone`)
 2. `chrome://extensions` → enable **Developer mode**
 3. **Load unpacked** → pick the unpacked folder (keep the folder after installing)
 
@@ -32,3 +34,5 @@ git ls-files -co --exclude-standard | grep -v '^\.git' | grep -v '^docs/' | grep
 ```
 
 Icons: Lucide (ISC). Font: Golos Text (SIL OFL 1.1). Licenses sit next to the files.
+
+[MIT](LICENSE) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)

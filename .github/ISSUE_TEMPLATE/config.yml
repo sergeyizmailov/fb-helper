@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/slilbudget/fb-helper/discussions
+    about: Ask or suggest in Discussions
+  - name: Security issue
+    url: https://github.com/slilbudget/fb-helper/security/advisories/new
+    about: Report privately
