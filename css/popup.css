@@ -112,6 +112,9 @@ main { padding-bottom: 0; }
 .btn.primary { background: var(--color-accent); color: var(--color-on-accent); }
 .btn.primary:hover:not(:disabled), .btn.primary:focus-visible { background: var(--color-accent-hover); }
 .btn.primary:disabled { background: var(--color-background-muted); color: var(--color-text-disabled); }
+/* Ghost: text + icon only, no fill — like the icon buttons; hover just darkens the text. */
+.btn.ghost, .btn.ghost:hover:not(:disabled), .btn.ghost:focus-visible { background: transparent; }
+.btn.ghost { padding: 0 var(--spacing-2); }
 .btn.sm { height: var(--size-element-sm); padding: 0 var(--spacing-3); font-size: 13px; }
 .btn.sm .i { --size-icon: 16px; }
 .icon-btn {
