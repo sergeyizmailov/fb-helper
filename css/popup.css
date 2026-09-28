@@ -170,14 +170,16 @@ main { padding-bottom: 0; }
 #cookieBox.filled .ck-scroll::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); background-clip: padding-box; }
 #cookieBox .ck-n { color: var(--color-text-primary); font-weight: 600; }
 #cookieBox .ck-v { color: var(--color-text-secondary); }
-/* Token field + "Проверить" + trash on top; under them the two copy buttons span the full card width,
-   split exactly in half, so both sit at the same distance from the left and right edges. */
+/* Two copy buttons (token tab, cookie tab): full card width, split exactly in half, so both sit at the
+   same distance from the left and right edges. */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-1-5); min-width: 0; }
+.split .btn { justify-content: center; }
+/* Token field + "Проверить" + trash on top; the copy buttons under them span all three columns. */
 .token-grid {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center;
   gap: var(--spacing-3) var(--spacing-1); min-width: 0;
 }
-.token-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-1-5); min-width: 0; }
-.token-actions .btn { justify-content: center; }
+.token-grid > .split { grid-column: 1 / -1; }
 .source { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-1-5) var(--spacing-2); font-size: 13px; color: var(--color-text-secondary); }
 .source:empty { display: none; }
 /* Token kind: plain text under the field — badge + app, what it is for, where ads go. */
