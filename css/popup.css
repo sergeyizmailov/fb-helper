@@ -23,7 +23,7 @@
   --color-error-muted: #FA383E17;
 
   --spacing-1: 4px; --spacing-1-5: 6px; --spacing-2: 8px; --spacing-3: 12px; --spacing-4: 16px;
-  --radius-inner: 6px; --radius-element: 8px; --radius-full: 9999px;
+  --radius-inner: 4px; --radius-element: 6px; --radius-full: 9999px;
   --size-element-sm: 30px; --size-element-md: 36px; --size-icon: 18px;
   /* Type scale: xs = token-type codes, sm = pills and secondary notes, md = all text, controls and IDs,
      lg = names and amounts, xl = the total. Text sharing a line uses one size. */
@@ -72,7 +72,7 @@ body {
 .tabs {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-1);
   margin: 0 var(--spacing-4); padding: var(--spacing-1);   /* 4px grey rim around the active pill */
-  background: var(--color-background-muted); border-radius: 10px;
+  background: var(--color-background-muted); border-radius: calc(var(--radius-inner) + var(--spacing-1));   /* concentric with the pill inside */
 }
 .tab {
   appearance: none; border: 0; background: transparent; color: var(--color-text-secondary);
@@ -247,7 +247,7 @@ main { padding-bottom: 0; }
 /* ---------- period switcher + total ---------- */
 .seg {
   display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--spacing-1); padding: var(--spacing-1);
-  background: var(--color-background-muted); border-radius: 10px;
+  background: var(--color-background-muted); border-radius: calc(var(--radius-inner) + var(--spacing-1));   /* concentric with the pill inside */
 }
 .seg:empty { display: none; }
 .seg-btn {
