@@ -527,7 +527,7 @@ function renderCookies() {
   const until = xs?.expirationDate ? new Date(xs.expirationDate * 1000).toLocaleDateString(locale()) : null;
   fill($("#cookieStatus"), hasSession()
     ? [pill(t("ck.loggedIn"), "ok"), el("span", {}, until ? t("ck.until") : t("ck.untilClose"),
-        until ? numEl(until) : null, " · ", numEl(n), " cookie")]
+        until ? numEl(until) : null, " · ", numEl(n), ` ${tn(n, "ck.count")}`)]
     : [pill(t("ck.loggedOut"), "bad")]);
 }
 const cookieHeader = () => state.cookies.map((c) => `${c.name}=${c.value}`).join("; ");

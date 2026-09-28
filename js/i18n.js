@@ -72,7 +72,7 @@ const D = {
     "check.profile": "Профиль", "check.app": "Приложение", "check.perms": "Права", "check.permsN": "Права ({n})", "check.error": "Ошибка",
 
     "ck.none": "Cookie не найдены", "ck.loggedIn": "Вход выполнен", "ck.until": "сессия до ", "ck.untilClose": "сессия до закрытия браузера",
-    "ck.loggedOut": "Не залогинен в Facebook", "ck.noSession": "Нет c_user / xs — залогинься в FB",
+    "ck.count": ["cookie", "cookie", "cookie"], "ck.loggedOut": "Не залогинен в Facebook", "ck.noSession": "Нет c_user / xs — залогинься в FB",
     "ck.jsonCopied": "JSON скопирован", "ck.copied": "Cookie скопированы", "env.copied": "Токен + cookie скопированы",
 
     "acc.wait": "Обновить можно через {n} с", "acc.loaded": "Кабинетов: {n}", "acc.truncated": " (не все — лимит 10 страниц)",
@@ -160,7 +160,7 @@ const D = {
     "check.profile": "Profile", "check.app": "App", "check.perms": "Permissions", "check.permsN": "Permissions ({n})", "check.error": "Error",
 
     "ck.none": "No cookies found", "ck.loggedIn": "Logged in", "ck.until": "session until ", "ck.untilClose": "session until the browser closes",
-    "ck.loggedOut": "Not logged in to Facebook", "ck.noSession": "No c_user / xs — log in to FB",
+    "ck.count": ["cookie", "cookies"], "ck.loggedOut": "Not logged in to Facebook", "ck.noSession": "No c_user / xs — log in to FB",
     "ck.jsonCopied": "JSON copied", "ck.copied": "Cookies copied", "env.copied": "Token + cookies copied",
 
     "acc.wait": "Refresh available in {n} s", "acc.loaded": "Ad accounts: {n}", "acc.truncated": " (not all — 10-page limit)",
