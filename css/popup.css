@@ -25,6 +25,9 @@
   --spacing-1: 4px; --spacing-1-5: 6px; --spacing-2: 8px; --spacing-3: 12px; --spacing-4: 16px;
   --radius-inner: 6px; --radius-element: 8px; --radius-full: 9999px;
   --size-element-sm: 30px; --size-element-md: 36px; --size-icon: 18px;
+  /* Type scale: xs = token-type codes, sm = pills and secondary notes, md = all text, controls and IDs,
+     lg = names and amounts, xl = the total. Text sharing a line uses one size. */
+  --text-xs: 11px; --text-sm: 12px; --text-md: 13px; --text-lg: 14px; --text-xl: 19px;
   --font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
 
@@ -35,7 +38,7 @@ body {
   /* No fixed height: the popup auto-sizes to its content and grows as sections expand
      (Chrome's own hard cap of ~600px is the only limit, past which Chrome adds its scrollbar). */
   background: var(--color-background-surface); color: var(--color-text-primary);
-  font: 14px/1.45 var(--font); letter-spacing: -0.005em; -webkit-font-smoothing: antialiased;
+  font: var(--text-md)/1.45 var(--font); letter-spacing: -0.005em; -webkit-font-smoothing: antialiased;
 }
 .hidden { display: none !important; }
 
@@ -59,28 +62,28 @@ body {
 .bar {
   position: sticky; top: 0; z-index: 3;
   background: var(--color-background-surface);
-  padding-bottom: var(--spacing-3);
+  padding-bottom: 0;
 }
 .top {
   display: flex; align-items: center; justify-content: space-between;
   height: 48px; padding: 0 var(--spacing-4);
 }
-.brand { display: flex; align-items: center; gap: var(--spacing-2); font-weight: 600; font-size: 15px; }
+.brand { display: flex; align-items: center; gap: var(--spacing-2); font-size: var(--text-lg); font-weight: 600; }   /* the logo is the one bold word */
 .tabs {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px;
-  margin: 0 var(--spacing-4); padding: 2px;
-  background: var(--color-background-muted); border-radius: var(--radius-element);
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-1);
+  margin: 0 var(--spacing-4); padding: var(--spacing-1);   /* 4px grey rim around the active pill */
+  background: var(--color-background-muted); border-radius: 10px;
 }
 .tab {
   appearance: none; border: 0; background: transparent; color: var(--color-text-secondary);
-  height: var(--size-element-sm); border-radius: var(--radius-inner);
-  font: 500 13px var(--font); cursor: pointer;
+  height: 26px; border-radius: var(--radius-inner);   /* outer height stays 34px */
+  font: var(--text-md) var(--font); cursor: pointer;
 }
 .tab:hover, .tab:focus-visible { color: var(--color-text-primary); }
 .tab.active { background: var(--color-background-surface); color: var(--color-text-primary); }
 
 /* ---------- dividers: 1px, inset 16px from both edges, never edge-to-edge ---------- */
-.bar::after, .card:not(:last-child)::after, .acc:not(:last-child)::after {
+.card:not(:last-child)::after, .acc:not(:last-child)::after {
   content: ""; position: absolute; left: var(--spacing-4); right: var(--spacing-4); bottom: 0; height: 1px;
   background: var(--color-border); pointer-events: none;
 }
@@ -91,9 +94,10 @@ main { padding-bottom: 0; }
 .panel { display: none; }
 .panel.active { display: block; }
 .card { position: relative; display: grid; gap: var(--spacing-3); min-width: 0; padding: var(--spacing-4); }
+.panel > .card:first-child { padding-top: var(--spacing-3); }   /* tabs → content = the 12px gap used inside cards */
 
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-1-5); }
-.hint { color: var(--color-text-secondary); font-size: 13px; }
+.hint { color: var(--color-text-secondary); }
 
 /* ---------- controls ---------- */
 .btn {
@@ -101,7 +105,7 @@ main { padding-bottom: 0; }
   display: inline-flex; align-items: center; gap: var(--spacing-1-5);
   height: var(--size-element-md); padding: 0 var(--spacing-3); border-radius: var(--radius-element);
   background: var(--color-background-muted); color: var(--color-text-secondary);   /* soft grey, like the icon buttons */
-  font: 500 14px var(--font); text-decoration: none; white-space: nowrap;
+  font: var(--text-md) var(--font); text-decoration: none; white-space: nowrap;
 }
 .btn:hover:not(:disabled), .btn:focus-visible { background: var(--color-hover-fill); }
 .btn:not(.primary):hover:not(:disabled), .btn:not(.primary):focus-visible { color: var(--color-text-primary); }
@@ -112,7 +116,7 @@ main { padding-bottom: 0; }
 /* Ghost: text + icon only, no fill — like the icon buttons; hover just darkens the text. */
 .btn.ghost, .btn.ghost:hover:not(:disabled), .btn.ghost:focus-visible { background: transparent; }
 .btn.ghost { padding: 0 var(--spacing-2); }
-.btn.sm { height: var(--size-element-sm); padding: 0 var(--spacing-3); font-size: 13px; }
+.btn.sm { height: var(--size-element-sm); padding: 0 var(--spacing-3); }
 .btn.sm .i { --size-icon: 16px; }
 .icon-btn {
   appearance: none; border: 0; background: transparent; color: var(--color-text-secondary); cursor: pointer;
@@ -131,15 +135,12 @@ main { padding-bottom: 0; }
 .field {
   width: 100%; min-width: 0; border: 0; border-radius: var(--radius-element);
   background: var(--color-background-muted); color: var(--color-text-primary);
-  height: var(--size-element-md); padding: 0 var(--spacing-3); font: 14px var(--font);
+  height: var(--size-element-md); padding: 0 var(--spacing-3); font: var(--text-md) var(--font);
 }
 .field::placeholder { color: var(--color-text-disabled); }
 .field:focus { background: var(--color-hover-fill); }
-.data { font-size: 13px; }
 /* Equal-width digits wherever numbers sit: amounts line up, IDs keep identical spacing across rows. */
 .data, .kind-badge, .guide-code, .num, .total-value, .acc-spend, .acc-id { font-variant-numeric: tabular-nums; }
-/* Hints in the token/cookie fields ("Открой Facebook…", "Cookie не найдены") are text, not data: text size. */
-.field.data:not(.filled) { font-size: 14px; }
 /* Token: one line; when longer than the field it ends in "…", with the same 12px inset on both sides.
    Block, not flex — a flex text item can't shrink and would blow the box past the popup width. */
 #tokenBox {
@@ -168,7 +169,7 @@ main { padding-bottom: 0; }
   border: 3px solid transparent; background-clip: padding-box;
 }
 #cookieBox.filled .ck-scroll::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); background-clip: padding-box; }
-#cookieBox .ck-n { color: var(--color-text-primary); font-weight: 600; }
+#cookieBox .ck-n { color: var(--color-text-primary); }
 #cookieBox .ck-v { color: var(--color-text-secondary); }
 /* Two copy buttons (token tab, cookie tab): full card width, split exactly in half, so both sit at the
    same distance from the left and right edges. */
@@ -180,14 +181,14 @@ main { padding-bottom: 0; }
   gap: var(--spacing-3) var(--spacing-1); min-width: 0;
 }
 .token-grid > .split { grid-column: 1 / -1; }
-.source { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-1-5) var(--spacing-2); font-size: 13px; color: var(--color-text-secondary); }
+.source { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-1-5) var(--spacing-2); color: var(--color-text-secondary); }
 .source:empty { display: none; }
 /* Token kind: plain text under the field — badge + app, what it is for, where ads go. */
-.kind { display: grid; gap: 2px; padding: 0 2px; font-size: 13px; color: var(--color-text-secondary); }
+.kind { display: grid; gap: 2px; padding: 0 2px; color: var(--color-text-secondary); }
 .kind-head { display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: 2px; }
-.kind-badge { font: 600 12px var(--font); letter-spacing: .02em; padding: 1px 7px; border-radius: var(--radius-full);
+.kind-badge { font: var(--text-xs) var(--font); letter-spacing: .02em; padding: 1px 7px; border-radius: var(--radius-full);
   color: var(--kind-fg); background: var(--kind-bg); }
-.kind-app { font-weight: 600; font-size: 14px; color: var(--color-text-primary); }
+.kind-app { font-size: var(--text-lg); color: var(--color-text-primary); }
 .kind.ok   { --kind-fg: var(--color-success); --kind-bg: var(--color-success-muted); }
 .kind.info { --kind-fg: var(--color-accent);  --kind-bg: var(--color-accent-muted); }
 .kind-ads a { display: inline-flex; align-items: center; gap: 3px; color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
@@ -205,7 +206,7 @@ main { padding-bottom: 0; }
 .pill {
   display: inline-flex; align-items: center; gap: var(--spacing-1-5); white-space: nowrap;
   height: 24px; padding: 0 10px; border-radius: var(--radius-full);
-  font-size: 12.5px; font-weight: 500; color: var(--color-text-secondary); background: var(--color-background-muted);
+  font-size: var(--text-sm); color: var(--color-text-secondary); background: var(--color-background-muted);
 }
 .pill.ok { color: var(--color-success); background: var(--color-success-muted); }
 .pill.warn { color: var(--color-warning); background: var(--color-warning-muted); }
@@ -219,7 +220,7 @@ main { padding-bottom: 0; }
 
 /* permissions: key pills + collapsible full list */
 .perms { display: grid; gap: var(--spacing-2); }
-.more summary { list-style: none; cursor: pointer; width: fit-content; display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--color-text-secondary); font-size: 13px; font-weight: 500; }
+.more summary { list-style: none; cursor: pointer; width: fit-content; display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--color-text-secondary); }
 .more summary::-webkit-details-marker { display: none; }
 .more summary:hover, .more summary:focus-visible { color: var(--color-text-primary); }
 /* The chevron takes the text colour, so text and icon darken together on hover — like every other control. */
@@ -227,18 +228,18 @@ main { padding-bottom: 0; }
 .more[open] summary .i-chevron { transform: rotate(180deg); }
 .more .when-open, .more[open] .when-closed { display: none; }
 .more[open] .when-open { display: inline; }
-.perm-list { margin-top: var(--spacing-2); color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.perm-list { margin-top: var(--spacing-2); color: var(--color-text-secondary); font-size: var(--text-sm); line-height: 1.6; overflow-wrap: anywhere; }
 
 /* token-type guide: one collapsible block, brief. Each row = grey code chip + short purpose. */
 .guide-body { margin-top: var(--spacing-2); display: grid; gap: var(--spacing-2); }
-.guide-row { display: flex; gap: var(--spacing-2); font-size: 12.5px; line-height: 1.45; }
+.guide-row { display: flex; gap: var(--spacing-2); }
 .guide-row .guide-code { flex: none; align-self: start; }
-.guide-row b { color: var(--color-text-primary); font-weight: 600; }
+.guide-row b { color: var(--color-text-primary); font-weight: inherit; }
 .guide-row span:last-child { color: var(--color-text-secondary); }
-.guide-code { font: 600 10.5px var(--font); letter-spacing: .04em; color: var(--color-text-secondary);
+.guide-code { font: var(--text-xs) var(--font); letter-spacing: .04em; color: var(--color-text-secondary);
   background: var(--color-background-muted); padding: 2px 6px; border-radius: var(--radius-inner); }
 
-.kv { margin: 0; display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--spacing-2) var(--spacing-3); font-size: 13.5px; }
+.kv { margin: 0; display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--spacing-2) var(--spacing-3); }
 .kv:empty { display: none; }
 .kv dt { color: var(--color-text-secondary); }
 .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
@@ -247,22 +248,22 @@ main { padding-bottom: 0; }
 
 /* ---------- period switcher + total ---------- */
 .seg {
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 2px;
-  background: var(--color-background-muted); border-radius: var(--radius-element);
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--spacing-1); padding: var(--spacing-1);
+  background: var(--color-background-muted); border-radius: 10px;
 }
 .seg:empty { display: none; }
 .seg-btn {
   appearance: none; border: 0; background: transparent; cursor: pointer; white-space: nowrap;
-  height: 28px; border-radius: var(--radius-inner); font: 500 12.5px var(--font); color: var(--color-text-secondary);
+  height: 24px; border-radius: var(--radius-inner); font: var(--text-md) var(--font); color: var(--color-text-secondary);
 }
 .seg-btn:hover, .seg-btn:focus-visible { color: var(--color-text-primary); }
 .seg-btn.active { background: var(--color-background-surface); color: var(--color-text-primary); }
 .total { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px var(--spacing-3); }
 .total:empty { display: none; }
-.total-label { color: var(--color-text-secondary); font-size: 13px; }
-.total-meta { color: var(--color-text-secondary); font-size: 12.5px; white-space: nowrap; text-align: right; }
-.total-value small { margin-left: var(--spacing-2); font-size: 12.5px; font-weight: 400; color: var(--color-text-secondary); }
-.total-value { grid-column: 1 / -1; font-size: 19px; font-weight: 600; overflow-wrap: anywhere; }
+.total-label { color: var(--color-text-secondary); }
+.total-meta { color: var(--color-text-secondary); white-space: nowrap; text-align: right; }
+.total-value small { margin-left: var(--spacing-2); font-size: var(--text-sm); color: var(--color-text-secondary); }
+.total-value { grid-column: 1 / -1; font-size: var(--text-xl); overflow-wrap: anywhere; }
 .chips:empty { display: none; }
 .chip { appearance: none; border: 0; cursor: pointer; font-family: var(--font); }
 /* Tinted pills have no neutral hover fill to borrow, so keyboard focus is a hairline in the pill's own colour. */
@@ -290,7 +291,7 @@ main { padding-bottom: 0; }
 }
 .acc-title .i-chevron { --size-icon: 16px; color: var(--color-text-disabled); flex: none; }
 .acc.open .acc-title .i-chevron { transform: rotate(180deg); color: var(--color-text-secondary); }
-.acc-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-name { font-size: var(--text-lg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acc-ids { display: flex; align-items: center; gap: var(--spacing-2); min-width: 0; padding-left: 22px; }
 .acc-link { display: inline-grid; place-items: center; color: var(--color-text-disabled); }
 .acc-link .i { --size-icon: 14px; }
@@ -298,22 +299,22 @@ main { padding-bottom: 0; }
 .acc-id {
   appearance: none; border: 0; background: none; padding: 0; cursor: pointer; justify-self: start;
   display: inline-flex; align-items: center; gap: var(--spacing-1);
-  font: 12px var(--font); color: var(--color-text-secondary);
+  font: var(--text-md) var(--font); color: var(--color-text-secondary);
 }
 .acc-id .i { --size-icon: 14px; color: var(--color-text-disabled); }
 .acc-id:hover, .acc-id:hover .i, .acc-id:focus-visible, .acc-id:focus-visible .i { color: var(--color-text-primary); }
 .acc-head > .pill { justify-self: end; }
-.acc-spend { justify-self: end; font-size: 14px; font-weight: 600; white-space: nowrap; }
-.acc-spend.muted { color: var(--color-text-disabled); font-weight: 500; }
-.acc-sub { justify-self: end; text-align: right; color: var(--color-text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.acc-spend { justify-self: end; font-size: var(--text-lg); white-space: nowrap; }
+.acc-spend.muted { color: var(--color-text-disabled); }
+.acc-sub { justify-self: end; text-align: right; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
 .owner { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .owner .i { --size-icon: 14px; }
-.acc-meta { min-width: 0; padding-left: 22px; display: flex; flex-wrap: wrap; gap: 2px var(--spacing-3); color: var(--color-text-secondary); font-size: 13px; }
+.acc-meta { min-width: 0; padding-left: 22px; display: flex; flex-wrap: wrap; gap: 2px var(--spacing-3); color: var(--color-text-secondary); }
 .acc-body { display: none; gap: var(--spacing-3); padding: var(--spacing-1) var(--spacing-4) var(--spacing-4) calc(var(--spacing-4) + 22px); }
 .acc.open .acc-body { display: grid; }
-.ads { display: grid; font-size: 13px; }
+.ads { display: grid; }
 .ads:empty { display: none; }
-.ads-sum { padding-bottom: var(--spacing-2); color: var(--color-text-secondary); font-size: 12.5px; }
+.ads-sum { padding-bottom: var(--spacing-2); color: var(--color-text-secondary); font-size: var(--text-sm); }
 .btn.sm .i-chevron { --size-icon: 14px; }
 .i-chevron.up { transform: rotate(180deg); }
 .icon-btn.sm { width: var(--size-element-sm); height: var(--size-element-sm); }
@@ -324,9 +325,9 @@ main { padding-bottom: 0; }
 .empty { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-4); }
 
 .toast {
-  position: fixed; left: 50%; bottom: var(--spacing-3); transform: translateX(-50%);
+  position: fixed; left: 50%; bottom: var(--spacing-3); transform: translateX(-50%); z-index: 4;
   background: var(--color-text-primary); color: #fff; padding: var(--spacing-2) var(--spacing-3);
-  border-radius: var(--radius-element); font-size: 13px; opacity: 0; pointer-events: none; max-width: calc(100% - 32px);
+  border-radius: var(--radius-element); opacity: 0; pointer-events: none; max-width: calc(100% - 32px);
 }
 .toast.show { opacity: 1; }
 .toast.err { background: var(--color-error); }
