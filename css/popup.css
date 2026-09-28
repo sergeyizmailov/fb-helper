@@ -182,7 +182,7 @@ main { padding-bottom: 0; }
    same distance from the left and right edges. */
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-1-5); min-width: 0; }
 .split .btn { justify-content: center; }
-/* Token field + "Проверить" + trash on top; the copy buttons under them span all three columns. */
+/* Token field + "Check" + trash on top; the copy buttons under them span all three columns. */
 .token-grid {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center;
   gap: var(--spacing-3) var(--spacing-1); min-width: 0;
@@ -241,7 +241,7 @@ main { padding-bottom: 0; }
 .guide-body { margin-top: var(--spacing-2); display: grid; gap: var(--spacing-2); }
 .guide-row { display: flex; gap: var(--spacing-2); }
 .guide-row .guide-code { flex: none; align-self: start; }
-/* app name = deep link to the page that holds that token: same look as «Перейти в Ads Manager» */
+/* app name = deep link to the page that holds that token: same look as "Open Ads Manager" */
 .guide-row a { display: inline-flex; align-items: center; gap: 3px; color: var(--color-accent); text-decoration: none; }
 .guide-row a:hover, .guide-row a:focus-visible { color: var(--color-accent-hover); }
 .guide-row a .i { --size-icon: 14px; }

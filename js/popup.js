@@ -40,9 +40,9 @@ const TOKEN_KIND = {
   EAAI: { app: "Automated Rules", tone: "info", ads: true },
 };
 // Every grabbed value already matched the token regex, so it IS a token — just from an app we didn't
-// hardcode. "Проверить" reads the real app from Graph, so keep this calm, not "это не токен".
+// hardcode. "Check" reads the real app from Graph, so keep this calm, not "this is not a token".
 const UNKNOWN_KIND = { tone: "info" };                  // app / use come from t("kind.unknown.*")
-// Friendly names for the first-party apps behind the tokens (shown after «Проверить»).
+// Friendly names for the first-party apps behind the tokens (shown after "Check").
 const KNOWN_APPS = {
   "119211728144504": "Ads Manager", "436761779744620": "Business Manager",
   "515496645328243": "Commerce Manager", "2094176354154603": "Events Manager",
@@ -657,7 +657,7 @@ function tzLabelOf(tz) {
   const city = tz.includes("/") && !tz.startsWith("Etc/") ? tz.split("/").pop().replace(/_/g, " ") : "";
   return city ? `${off} · ${city}` : off;
 }
-// Rows matching the search + status filter. The total, the count and "ID активных" all follow it.
+// Rows matching the search + status filter. The total, the count and "Active IDs" all follow it.
 function visibleRows() {
   const q = state.filter.trim().toLowerCase();
   return state.accounts.filter((a) => {
@@ -816,7 +816,7 @@ const adsBox = (id) => document.querySelector(`[data-ads-box="${CSS.escape(id)}"
 function reviewText(fb) {
   return Object.values(fb?.global || {}).map((v) => (typeof v === "string" ? v : JSON.stringify(v))).join("; ");
 }
-// Before the first load: one "Объявления" button. After: a show/hide toggle (no request, uses the
+// Before the first load: one "Ads" button. After: a show/hide toggle (no request, uses the
 // cached list) + a refresh icon that re-reads Graph and is the only control bound to the 30 s lock.
 function adsControls(id) {
   const data = state.ads[id];
@@ -906,7 +906,7 @@ function switchTab(name) {
 }
 
 // RU · EN in the header. Everything is redrawn from state; the token field is re-read from the FB tab (local),
-// the «Проверить» result is hidden (its text came from Graph in the old language — press again).
+// the "Check" result is hidden (its text came from Graph in the old language — press again).
 async function switchLang(l) {
   if (!(await setLang(l))) return;
   state.statusFilter = null;                            // it holds a translated label

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -20,9 +20,9 @@
       </div>
     </header>
     <nav class="tabs" role="tablist">
-      <button class="tab active" id="tabbtn-token" data-tab="token" role="tab" aria-selected="true" aria-controls="tab-token" data-i18n="tab.token">Токен</button>
-      <button class="tab" id="tabbtn-cookies" data-tab="cookies" role="tab" aria-selected="false" aria-controls="tab-cookies" data-i18n="tab.cookies">Cookie</button>
-      <button class="tab" id="tabbtn-accounts" data-tab="accounts" role="tab" aria-selected="false" aria-controls="tab-accounts" data-i18n="tab.accounts">Кабинеты</button>
+      <button class="tab active" id="tabbtn-token" data-tab="token" role="tab" aria-selected="true" aria-controls="tab-token" data-i18n="tab.token">Token</button>
+      <button class="tab" id="tabbtn-cookies" data-tab="cookies" role="tab" aria-selected="false" aria-controls="tab-cookies" data-i18n="tab.cookies">Cookies</button>
+      <button class="tab" id="tabbtn-accounts" data-tab="accounts" role="tab" aria-selected="false" aria-controls="tab-accounts" data-i18n="tab.accounts">Ad accounts</button>
     </nav>
   </div>
 
@@ -31,22 +31,22 @@
       <div class="card">
         <div class="token-grid">
           <div class="field data" id="tokenBox">—</div>
-          <button id="checkToken" class="btn ghost" title="Профиль, приложение и права токена" data-i18n-title="check.title" aria-label="Проверить токен" data-i18n-aria="check.aria" disabled><i class="i i-check"></i><span data-i18n="check">Проверить</span></button>
-          <button id="clearSession" class="icon-btn" title="Сбросить токен и кэш кабинетов" data-i18n-title="clear.title" aria-label="Сбросить токен и кэш кабинетов" data-i18n-aria="clear.title"><i class="i i-trash"></i></button>
+          <button id="checkToken" class="btn ghost" title="Profile, app and permissions of the token" data-i18n-title="check.title" aria-label="Check token" data-i18n-aria="check.aria" disabled><i class="i i-check"></i><span data-i18n="check">Check</span></button>
+          <button id="clearSession" class="icon-btn" title="Reset token and account cache" data-i18n-title="clear.title" aria-label="Reset token and account cache" data-i18n-aria="clear.title"><i class="i i-trash"></i></button>
           <div class="split">
-            <button id="grabToken" class="btn primary"><i class="i i-copy"></i><span data-i18n="copyToken">Скопировать токен</span></button>
-            <button id="copyEnv" class="btn"><i class="i i-copy"></i><span data-i18n="copyEnv">Токен + cookie</span></button>
+            <button id="grabToken" class="btn primary"><i class="i i-copy"></i><span data-i18n="copyToken">Copy token</span></button>
+            <button id="copyEnv" class="btn"><i class="i i-copy"></i><span data-i18n="copyEnv">Token + cookies</span></button>
           </div>
         </div>
         <div id="kindCard" class="kind hidden"></div>
         <details class="more guide">
-          <summary><i class="i i-chevron"></i><span data-i18n="guide.title">Типы токенов</span></summary>
+          <summary><i class="i i-chevron"></i><span data-i18n="guide.title">Token types</span></summary>
           <div class="guide-body">
-            <div class="guide-row"><span class="guide-code">EAAB</span><span><a href="https://adsmanager.facebook.com/adsmanager/manage/campaigns" target="_blank" rel="noopener noreferrer" title="Открыть — токен этого типа будет на той вкладке" data-i18n-title="guide.open">Ads Manager<i class="i i-external"></i></a> <span data-i18n="guide.EAAB">— основной для рекламы: запуск и правка.</span></span></div>
-            <div class="guide-row"><span class="guide-code">EAAI</span><span><a href="https://adsmanager.facebook.com/ads/manager/rules/management/" target="_blank" rel="noopener noreferrer" title="Открыть — токен этого типа будет на той вкладке" data-i18n-title="guide.open">Automated Rules<i class="i i-external"></i></a> <span data-i18n="guide.EAAI">— настройка автоправил.</span></span></div>
-            <div class="guide-row"><span class="guide-code">EAAG</span><span><a href="https://business.facebook.com/settings/" target="_blank" rel="noopener noreferrer" title="Открыть — токен этого типа будет на той вкладке" data-i18n-title="guide.open">Business Manager<i class="i i-external"></i></a> <span data-i18n="guide.EAAG">— бизнес-активы: страницы, Instagram, лиды, WhatsApp, каталоги и реклама.</span></span></div>
-            <div class="guide-row"><span class="guide-code">EAAH</span><span><a href="https://business.facebook.com/commerce/" target="_blank" rel="noopener noreferrer" title="Открыть — токен этого типа будет на той вкладке" data-i18n-title="guide.open">Commerce Manager<i class="i i-external"></i></a> <span data-i18n="guide.EAAH">— каталоги: товары и расширенное управление.</span></span></div>
-            <div class="guide-row"><span class="guide-code">EAAd</span><span><a href="https://business.facebook.com/events_manager2/overview" target="_blank" rel="noopener noreferrer" title="Открыть — токен этого типа будет на той вкладке" data-i18n-title="guide.open">Events Manager<i class="i i-external"></i></a> <span data-i18n="guide.EAAd">— события: пиксели, датасеты и отслеживание.</span></span></div>
+            <div class="guide-row"><span class="guide-code">EAAB</span><span><a href="https://adsmanager.facebook.com/adsmanager/manage/campaigns" target="_blank" rel="noopener noreferrer" title="Open — that tab will hold a token of this type" data-i18n-title="guide.open">Ads Manager<i class="i i-external"></i></a> <span data-i18n="guide.EAAB">— the main ads token: launch and edit.</span></span></div>
+            <div class="guide-row"><span class="guide-code">EAAI</span><span><a href="https://adsmanager.facebook.com/ads/manager/rules/management/" target="_blank" rel="noopener noreferrer" title="Open — that tab will hold a token of this type" data-i18n-title="guide.open">Automated Rules<i class="i i-external"></i></a> <span data-i18n="guide.EAAI">— automated rules.</span></span></div>
+            <div class="guide-row"><span class="guide-code">EAAG</span><span><a href="https://business.facebook.com/settings/" target="_blank" rel="noopener noreferrer" title="Open — that tab will hold a token of this type" data-i18n-title="guide.open">Business Manager<i class="i i-external"></i></a> <span data-i18n="guide.EAAG">— business assets: pages, Instagram, leads, WhatsApp, catalogs and ads.</span></span></div>
+            <div class="guide-row"><span class="guide-code">EAAH</span><span><a href="https://business.facebook.com/commerce/" target="_blank" rel="noopener noreferrer" title="Open — that tab will hold a token of this type" data-i18n-title="guide.open">Commerce Manager<i class="i i-external"></i></a> <span data-i18n="guide.EAAH">— catalogs: products and advanced management.</span></span></div>
+            <div class="guide-row"><span class="guide-code">EAAd</span><span><a href="https://business.facebook.com/events_manager2/overview" target="_blank" rel="noopener noreferrer" title="Open — that tab will hold a token of this type" data-i18n-title="guide.open">Events Manager<i class="i i-external"></i></a> <span data-i18n="guide.EAAd">— events: pixels, datasets and tracking.</span></span></div>
           </div>
         </details>
         <dl id="tokenInfo" class="kv hidden"></dl>
@@ -57,8 +57,8 @@
       <div class="card">
         <div class="field data" id="cookieBox">—</div>
         <div class="split">
-          <button id="copyCookies" class="btn primary" title="Строка cookie: c_user=…; xs=…; …" data-i18n-title="copyCookies.title"><i class="i i-copy"></i><span data-i18n="copyCookies">Скопировать cookie</span></button>
-          <button id="copyCookieJson" class="btn" title="Те же cookie с атрибутами (domain, path, срок) — для импорта в антидетект" data-i18n-title="copyJson.title"><i class="i i-copy"></i>JSON</button>
+          <button id="copyCookies" class="btn primary" title="Cookie string: c_user=…; xs=…; …" data-i18n-title="copyCookies.title"><i class="i i-copy"></i><span data-i18n="copyCookies">Copy cookies</span></button>
+          <button id="copyCookieJson" class="btn" title="Same cookies with attributes (domain, path, expiry) — for import into an antidetect browser" data-i18n-title="copyJson.title"><i class="i i-copy"></i>JSON</button>
         </div>
         <div id="cookieStatus" class="source"></div>
       </div>
@@ -68,11 +68,11 @@
       <div class="card">
         <div class="search">
           <i class="i i-search"></i>
-          <input id="accountFilter" class="field" type="search" placeholder="Поиск" data-i18n-placeholder="search" aria-label="Поиск кабинетов" data-i18n-aria="search.aria" autocomplete="off">
-          <button id="copyLiveIds" class="btn ghost" title="ID активных кабинетов списком, по одному в строке" data-i18n-title="liveIds.title" disabled><i class="i i-copy"></i><span data-i18n="liveIds">ID активных</span></button>
-          <button id="loadAccounts" class="icon-btn" title="Обновить" data-i18n-title="refresh" aria-label="Обновить" data-i18n-aria="refresh"><i class="i i-refresh"></i></button>
+          <input id="accountFilter" class="field" type="search" placeholder="Search" data-i18n-placeholder="search" aria-label="Search ad accounts" data-i18n-aria="search.aria" autocomplete="off">
+          <button id="copyLiveIds" class="btn ghost" title="IDs of active ad accounts, one per line" data-i18n-title="liveIds.title" disabled><i class="i i-copy"></i><span data-i18n="liveIds">Active IDs</span></button>
+          <button id="loadAccounts" class="icon-btn" title="Refresh" data-i18n-title="refresh" aria-label="Refresh" data-i18n-aria="refresh"><i class="i i-refresh"></i></button>
         </div>
-        <div class="seg" id="periodSeg" role="group" aria-label="Период спенда" data-i18n-aria="period.aria"></div>
+        <div class="seg" id="periodSeg" role="group" aria-label="Spend period" data-i18n-aria="period.aria"></div>
         <div class="total" id="accountsTotal"></div>
         <div class="chips" id="statusChips"></div>
       </div>
