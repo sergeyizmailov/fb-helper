@@ -145,7 +145,7 @@ function el(tag, attrs = {}, ...children) {
 const fill = (node, ...kids) => node.replaceChildren(...kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
 const pill = (text, tone = "") => el("span", { class: `pill ${tone}` }, text);
 const errText = (msg) => el("span", { class: "err-text" }, msg);
-// Numbers/ids in the mono font, so every digit in the UI shares one look.
+// Numbers/ids in the number font (--num), so every digit in the UI shares one look.
 const numEl = (text) => el("span", { class: "num" }, text);
 // Meta currencies without a minor-unit offset (amounts are whole units).
 const NO_OFFSET = new Set(["CLP", "COP", "CRC", "HUF", "ISK", "IDR", "JPY", "KRW", "PYG", "TWD", "VND"]);
@@ -776,7 +776,7 @@ function renderAccount(a, st) {
                 href: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${a.account_id}`,
                 onclick: (ev) => ev.stopPropagation() }, el("i", { class: "i i-external" }))),
     st ? el("div", { class: "acc-spend" }, fmt(st.spend, cur))
-       : el("div", { class: "acc-spend muted", title: "Нет данных за этот период — обнови список" }, "—"),  // .acc-spend is mono in CSS
+       : el("div", { class: "acc-spend muted", title: "Нет данных за этот период — обнови список" }, "—"),  // .acc-spend uses the number font in CSS
     el("div", { class: "acc-meta" },
       a.business
         ? el("span", { class: "owner", title: `Кабинет в БМ ${a.business.name} · ${a.business.id}` }, el("i", { class: "i i-bm" }), `БМ ${a.business.name}`)
