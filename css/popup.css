@@ -23,7 +23,7 @@
   --color-error-muted: #FA383E17;
 
   --spacing-1: 4px; --spacing-1-5: 6px; --spacing-2: 8px; --spacing-3: 12px; --spacing-4: 16px;
-  --radius-inner: 4px; --radius-element: 6px; --radius-full: 9999px;
+  --radius-inner: 6px; --radius-element: 8px; --radius-full: 9999px;
   --size-element-sm: 30px; --size-element-md: 36px; --size-icon: 18px;
   /* Type scale: xs = token-type codes, sm = pills and secondary notes, md = all text, controls and IDs,
      lg = names and amounts, xl = the total. Text sharing a line uses one size. */
@@ -128,7 +128,7 @@ main { padding-bottom: 0; }
 /* One quiet hover everywhere: grey text/icons turn near-black, a filled control steps one shade darker,
    nothing else. No focus rings; keyboard focus looks exactly like hover. */
 :focus, :focus-visible { outline: 0; }
-.tab, .seg-btn, .btn, .icon-btn, .field, .acc-head, .acc-id, .acc-link, .more summary, .kind-ads a {
+.tab, .seg-btn, .btn, .icon-btn, .field, .acc-head, .acc-id, .acc-link, .more summary, .kind-ads a, .guide-row a {
   transition: color .15s ease, background-color .15s ease;
 }
 
@@ -232,7 +232,10 @@ main { padding-bottom: 0; }
 .guide-body { margin-top: var(--spacing-2); display: grid; gap: var(--spacing-2); }
 .guide-row { display: flex; gap: var(--spacing-2); }
 .guide-row .guide-code { flex: none; align-self: start; }
-.guide-row b { color: var(--color-text-primary); font-weight: inherit; }
+/* app name = deep link to the page that holds that token: same look as «Перейти в Ads Manager» */
+.guide-row a { display: inline-flex; align-items: center; gap: 3px; color: var(--color-accent); text-decoration: none; }
+.guide-row a:hover, .guide-row a:focus-visible { color: var(--color-accent-hover); }
+.guide-row a .i { --size-icon: 14px; }
 .guide-row span:last-child { color: var(--color-text-secondary); }
 .guide-code { font: var(--text-xs) var(--font); letter-spacing: .04em; color: var(--color-text-secondary);
   background: var(--color-background-muted); padding: 2px 6px; border-radius: var(--radius-inner); }
