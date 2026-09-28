@@ -1,4 +1,4 @@
-/* Light, flat, hairline-only. Layout: Meta Astryx spacing/radius. Colours: Facebook. Icons: Lucide, ISC. Fonts: Onest + Red Hat Mono, OFL 1.1. */
+/* Light, flat, hairline-only. Layout: Meta Astryx spacing/radius. Colours: Facebook. Icons: Lucide, ISC. Fonts: Onest + IBM Plex Mono, OFL 1.1. */
 :root {
   color-scheme: light;
   /* Facebook palette: brand blue #4267B2 (PMS 2131 C), UI grays / status colours from facebook.com */
@@ -29,7 +29,7 @@
   --radius-inner: 6px; --radius-element: 8px; --radius-full: 9999px;
   --size-element-sm: 30px; --size-element-md: 36px; --size-icon: 18px;
   --font: "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --mono: "Red Hat Mono", "Onest", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
 
 * { box-sizing: border-box; }

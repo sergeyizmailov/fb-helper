@@ -1,7 +1,9 @@
 // FB Helper — read-only helper: EAAB token, session cookies, ad account status.
 // Nothing leaves the browser except GET calls to graph.facebook.com made on an explicit click.
 // Reading the token from the FB tab is local.
-// Token and account cache live in chrome.storage.session (gone when the browser closes);
+// Token and account cache live in chrome.storage.session (gone when the browser closes). The account cache
+// belongs to the FB user (c_user), not to a token string: FB pages hand out different tokens, and switching
+// or reloading them must not throw away accounts you just loaded. Another user in the profile drops it;
 // storage.local holds only a newer Graph API version learned from Graph itself.
 
 const $ = (sel) => document.querySelector(sel);
@@ -102,7 +104,7 @@ const AD_STATUS = {
 };
 
 const state = {
-  token: null, apiVersion: API_VERSION, accounts: [], fetchedAt: 0, truncated: false,
+  token: null, apiVersion: API_VERSION, accounts: [], fetchedAt: 0, truncated: false, owner: null,
   filter: "", statusFilter: null, cooldownUntil: 0, usage: null, cookies: [],
   // Rate locks survive popup reopen and "reset token" (storage.session), unlike the data cache.
   locks: { accountsAt: 0, ads: {} },
@@ -184,16 +186,29 @@ function isFacebookUrl(url) {
 // ---------- storage ----------
 async function loadState() {
   // storage.session is wiped on extension update/reload, so a cache is always from this API_VERSION.
-  const ses = await chrome.storage.session.get(["token", "tokenSource", "accounts", "fetchedAt", "truncated", "cooldownUntil", "usage", "locks"]);
+  const ses = await chrome.storage.session.get(["token", "tokenSource", ...CACHE_KEYS, "cooldownUntil", "usage", "locks"]);
   try { const { apiVersion } = await chrome.storage.local.get("apiVersion"); adoptVersion(apiVersion, false); } catch { /* */ }
   Object.assign(state, {
     token: ses.token || null, tokenSource: ses.tokenSource || null,
-    accounts: ses.accounts || [], fetchedAt: ses.fetchedAt || 0, truncated: !!ses.truncated,
+    accounts: ses.accounts || [], fetchedAt: ses.fetchedAt || 0, truncated: !!ses.truncated, owner: ses.owner || null,
+    ads: ses.ads || {}, open: new Set(ses.view?.open), adsHidden: new Set(ses.view?.hidden),
     cooldownUntil: ses.cooldownUntil || 0, usage: ses.usage ?? null,
     locks: { accountsAt: ses.locks?.accountsAt || 0, ads: ses.locks?.ads || {} },
   });
 }
 const saveSession = (patch) => chrome.storage.session.set(patch);
+const saveView = () => saveSession({ view: { open: [...state.open], hidden: [...state.adsHidden] } });
+// The logged-in FB user of this profile (c_user cookie), or null when logged out.
+async function fbUser() {
+  try { return (await chrome.cookies.get({ url: GRAPH_URL, name: "c_user" }))?.value || null; }
+  catch { return null; }
+}
+// The cached accounts are someone else's (other login, or logged out): drop them. true = dropped.
+async function checkOwner() {
+  if (!state.fetchedAt || state.owner === await fbUser()) return false;
+  await dropCache();
+  return true;
+}
 // Claim a rate slot atomically across every open page of this extension (popups in several windows):
 // Web Locks are shared per origin, and the check re-reads storage inside the lock.
 // key "accounts" = list refresh, otherwise an ad account id. Returns 0 if granted, else ms to wait.
@@ -212,15 +227,22 @@ function claimSlot(key) {
   });
 }
 
-// Drop everything tied to the current token and cancel in-flight requests.
-// Rate locks and the throttle pause are kept on purpose.
+// Token changed or reset: cancel in-flight requests (their answers are dropped as Stale).
+// The account cache stays; rate locks and the throttle pause are kept on purpose.
 function newGeneration() {
   state.gen++;
   state.ctl.abort();
   state.ctl = new AbortController();
   state.skip = new Set();
-  Object.assign(state, { accounts: [], fetchedAt: 0, truncated: false, open: new Set(), ads: {}, adsBusy: new Set(), adsHidden: new Set() });
+  state.adsBusy = new Set();
   $("#tokenInfo").classList.add("hidden");
+}
+// Accounts, ads and which rows are open: kept across popup reopen and token changes, dropped on reset
+// or when the FB user changes.
+const CACHE_KEYS = ["accounts", "fetchedAt", "truncated", "owner", "ads", "view"];
+function dropCache() {
+  Object.assign(state, { accounts: [], fetchedAt: 0, truncated: false, owner: null, open: new Set(), ads: {}, adsHidden: new Set() });
+  return chrome.storage.session.remove(CACHE_KEYS);
 }
 
 // ---------- Graph ----------
@@ -367,10 +389,10 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
       newGeneration();                                 // also cancels requests still running on the old token
       gen = state.gen;                                 // our own bump, not a reset
       Object.assign(state, { token: null, tokenSource: null });
-      await chrome.storage.session.remove(["token", "tokenSource", "accounts", "fetchedAt", "truncated"]);
+      await chrome.storage.session.remove(["token", "tokenSource"]);
       if (!current()) return null;
-      renderAccounts();
     }
+    if (await checkOwner() && current()) renderAccounts();
     renderToken(msg);
     if (!silent) toast(msg, true);
     return null;
@@ -396,9 +418,8 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
     newGeneration();
     gen = state.gen;                                   // our own bump, not a reset
     state.token = pick;
-    await chrome.storage.session.remove(["accounts", "fetchedAt", "truncated"]);
-    renderAccounts();
   }
+  if (await checkOwner() && current()) renderAccounts();
   if (!current()) return null;
   state.token = pick;
   state.tokenSource = { surface: surfaceOf(String(src.host || ""), String(src.path || "")) };
@@ -558,7 +579,7 @@ const slim = (a) => ({ ...a, _noInsights: state.skip.has("insights") || undefine
   funding_source_details: a.funding_source_details ? { display_string: a.funding_source_details.display_string } : undefined });
 
 async function fetchAccounts() {
-  if (!state.token) return toast("Сначала возьми токен", true);
+  if (!state.token && !(await grabToken({ toClipboard: false }))) return;   // no token: grabToken says why
   const gen = state.gen;                              // fixed before waiting for the lock
   let wait;
   try { wait = await claimSlot("accounts"); }        // before sending: a failed attempt counts too
@@ -586,8 +607,13 @@ async function fetchAccounts() {
       if (!after) break;
     }
     if (gen !== state.gen) return;
-    Object.assign(state, { accounts: rows, fetchedAt: Date.now(), truncated: !!after });
-    await saveSession({ accounts: rows, fetchedAt: state.fetchedAt, truncated: state.truncated });
+    const owner = await fbUser();
+    if (gen !== state.gen) return;
+    // Another user's list: their ads and open rows don't belong to this one.
+    if (owner !== state.owner) Object.assign(state, { open: new Set(), ads: {}, adsHidden: new Set() });
+    Object.assign(state, { accounts: rows, fetchedAt: Date.now(), truncated: !!after, owner });
+    await saveSession({ accounts: rows, fetchedAt: state.fetchedAt, truncated: state.truncated, owner, ads: state.ads });
+    saveView();
     toast(`Кабинетов: ${rows.length}${after ? " (не все — лимит 10 страниц)" : ""}`);
   } catch (e) {
     if (!(e instanceof Stale)) toast(e.message, true);
@@ -730,6 +756,7 @@ function renderAccount(a, st) {
     const open = card.classList.toggle("open");
     state.open[open ? "add" : "delete"](a.account_id);
     title.setAttribute("aria-expanded", String(open));
+    saveView();
   };
   // The whole row toggles on click (mouse); the keyboard / screen-reader control is the title button.
   // Its click bubbles to the row, so it has no handler of its own. The row itself is not a button:
@@ -803,7 +830,7 @@ function adsControls(id) {
   const n = data.ads?.length || 0;
   return el("div", { class: "actions" },
     el("button", { class: "btn sm", "aria-expanded": String(!hidden), "data-focus": `adsToggle:${id}`, onclick: () => {
-      state.adsHidden[hidden ? "delete" : "add"](id); renderAccounts();
+      state.adsHidden[hidden ? "delete" : "add"](id); saveView(); renderAccounts();
     } }, el("i", { class: `i i-chevron${hidden ? "" : " up"}` }), hidden ? `Объявления${data.error ? "" : ` · ${n}`}` : "Свернуть объявления"),
     el("button", { class: "icon-btn sm", "data-ads": id, "data-focus": `ads:${id}`, disabled: adsBlocked(id), title: "Обновить объявления",
                    "aria-label": "Обновить объявления", onclick: () => loadAds(id) }, el("i", { class: "i i-refresh" })));
@@ -827,7 +854,7 @@ function renderAds(box, { ads, more, error }) {
 }
 async function loadAds(id) {
   if (state.adsBusy.has(id)) return;
-  if (!state.token) return toast("Сначала возьми токен", true);
+  if (!state.token && !(await grabToken({ toClipboard: false }))) return;
   const gen = state.gen, busy = state.adsBusy;        // fixed before waiting for the lock
   busy.add(id);
   syncAdsButtons();
@@ -855,6 +882,7 @@ async function loadAds(id) {
     syncAdsButtons();
   }
   state.adsHidden.delete(id);                           // a fresh load is shown expanded
+  saveSession({ ads: state.ads }); saveView();
   renderAccounts();
 }
 
@@ -864,7 +892,7 @@ async function clearSession() {
   state.grabOp++;
   Object.assign(state, { token: null, tokenSource: null, usage: null, filter: "", statusFilter: null });
   // Rate locks and the throttle pause stay: a reset must not become a way around them.
-  await chrome.storage.session.remove(["token", "tokenSource", "accounts", "fetchedAt", "truncated", "usage"]);
+  await Promise.all([dropCache(), chrome.storage.session.remove(["token", "tokenSource", "usage"])]);
   $("#accountFilter").value = "";
   renderToken(); renderAccounts(); renderUsage();
   toast("Токен и кэш удалены");
@@ -907,6 +935,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#accountFilter").addEventListener("input", (e) => { state.filter = e.target.value; renderAccounts(); });
   $("#clearSession").addEventListener("click", clearSession);
 
+  await checkOwner();                                   // cache from another FB login: don't show it
   renderToken(); renderAccounts(); renderUsage();
   readCookies();
   // Show the token right away: read it from the open FB tab (local page read, no network request).
@@ -919,7 +948,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       newGeneration(); state.grabOp++;
       state.token = ch.token.newValue || null;
       state.tokenSource = ch.tokenSource?.newValue || null;
-      renderToken(); renderAccounts();
+      renderToken();
+    }
+    // Accounts loaded or dropped in another window of this extension: show the same list.
+    if (ch.fetchedAt && (ch.fetchedAt.newValue || 0) !== state.fetchedAt) {
+      chrome.storage.session.get(CACHE_KEYS).then((c) => {
+        Object.assign(state, { accounts: c.accounts || [], fetchedAt: c.fetchedAt || 0, truncated: !!c.truncated,
+          owner: c.owner || null, ads: c.ads || {} });
+        renderAccounts();
+      });
     }
   });
   // Re-render rows only when some account's "today" goes stale (its day rolled over).
