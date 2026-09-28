@@ -28,4 +28,4 @@ Chrome 121+. Нужна открытая вкладка Facebook в этом п�
 git ls-files -co --exclude-standard | grep -v '^\.git' | zip -q fb-helper-2.1.0.zip -@
 ```
 
-Иконки — Lucide (ISC), шрифты — Onest и IBM Plex Sans (SIL OFL 1.1), лицензии лежат рядом с файлами.
+Иконки — Lucide (ISC), шрифт — IBM Plex Sans (SIL OFL 1.1), лицензии лежат рядом с файлами.

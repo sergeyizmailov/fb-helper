@@ -145,7 +145,7 @@ function el(tag, attrs = {}, ...children) {
 const fill = (node, ...kids) => node.replaceChildren(...kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
 const pill = (text, tone = "") => el("span", { class: `pill ${tone}` }, text);
 const errText = (msg) => el("span", { class: "err-text" }, msg);
-// Numbers/ids in the number font (--num), so every digit in the UI shares one look.
+// Numbers/ids get equal-width digits (.num → tabular-nums), so they line up across rows.
 const numEl = (text) => el("span", { class: "num" }, text);
 // Meta currencies without a minor-unit offset (amounts are whole units).
 const NO_OFFSET = new Set(["CLP", "COP", "CRC", "HUF", "ISK", "IDR", "JPY", "KRW", "PYG", "TWD", "VND"]);
