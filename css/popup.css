@@ -291,7 +291,7 @@ main { padding-bottom: 0; }
 .acc.open .acc-title .i-chevron { transform: rotate(180deg); color: var(--color-text-secondary); }
 .acc-name { font-size: var(--text-lg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acc-ids { display: flex; align-items: center; gap: var(--spacing-2); min-width: 0; padding-left: 22px; }
-.acc-link { display: inline-grid; place-items: center; color: var(--color-text-disabled); }
+.acc-link { display: inline-grid; place-items: center; color: var(--color-text-secondary); }   /* rest/hover like every icon button */
 .acc-link .i { --size-icon: 14px; }
 .acc-link:hover, .acc-link:focus-visible { color: var(--color-text-primary); }
 .acc-id {
@@ -299,8 +299,8 @@ main { padding-bottom: 0; }
   display: inline-flex; align-items: center; gap: var(--spacing-1);
   font: var(--text-md) var(--font); color: var(--color-text-secondary);
 }
-.acc-id .i { --size-icon: 14px; color: var(--color-text-disabled); }
-.acc-id:hover, .acc-id:hover .i, .acc-id:focus-visible, .acc-id:focus-visible .i { color: var(--color-text-primary); }
+.acc-id .i { --size-icon: 14px; }
+.acc-id:hover, .acc-id:focus-visible { color: var(--color-text-primary); }
 .acc-head > .pill { justify-self: end; }
 .acc-spend { justify-self: end; font-size: var(--text-lg); white-space: nowrap; }
 .acc-spend.muted { color: var(--color-text-disabled); }
