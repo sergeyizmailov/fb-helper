@@ -149,12 +149,12 @@ main { padding-bottom: 0; }
 }
 #tokenBox.filled { color: var(--color-text-primary); }
 #cookieBox { display: flex; align-items: center; color: var(--color-text-disabled); }
-/* Filled: the full header string, names bright and values dim. The scroll lives on an inner element;
+/* Filled: the full header string in one colour, like the token. The scroll lives on an inner element;
    the box itself only rounds + clips, so the scrollbar's square corners are cut by the rounded box
    and the corners stay round at either scroll end. */
 #cookieBox.filled {
   display: block; height: auto; padding: 0; overflow: hidden;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);   /* same as the filled token field */
 }
 #cookieBox.filled .ck-scroll {
   max-height: 72px; overflow-y: auto; overflow-x: hidden;
@@ -169,8 +169,6 @@ main { padding-bottom: 0; }
   border: 3px solid transparent; background-clip: padding-box;
 }
 #cookieBox.filled .ck-scroll::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); background-clip: padding-box; }
-#cookieBox .ck-n { color: var(--color-text-primary); }
-#cookieBox .ck-v { color: var(--color-text-secondary); }
 /* Two copy buttons (token tab, cookie tab): full card width, split exactly in half, so both sit at the
    same distance from the left and right edges. */
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-1-5); min-width: 0; }

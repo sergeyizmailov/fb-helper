@@ -523,13 +523,12 @@ const hasSession = () => { const m = cookieMap(); return !!(m.c_user && m.xs); }
 function renderCookies() {
   const byName = cookieMap();
   for (const id of ["#copyCookies", "#copyCookieJson"]) $(id).disabled = !state.cookies.length;
-  // The whole cookie string, names bright and values dim, in a short scrollable box;
+  // The whole cookie string, one colour like the token, in a short scrollable box;
   // the status line under it says whether the profile is logged in and how many cookies go out.
   const n = state.cookies.length;
   const box = $("#cookieBox");
   box.classList.toggle("filled", !!n);
-  if (n) fill(box, el("div", { class: "ck-scroll" }, state.cookies.flatMap((c, i) => [
-    el("span", { class: "ck-n" }, c.name), "=", el("span", { class: "ck-v" }, c.value), i < n - 1 ? "; " : null])));
+  if (n) fill(box, el("div", { class: "ck-scroll" }, state.cookies.map((c) => `${c.name}=${c.value}`).join("; ")));
   else box.textContent = "Cookie не найдены";
   const xs = byName.xs;
   const until = xs?.expirationDate ? new Date(xs.expirationDate * 1000).toLocaleDateString("ru-RU") : null;
