@@ -7,6 +7,7 @@
 // storage.local holds only a newer Graph API version learned from Graph itself.
 
 import { t, tn, has, locale, getLang, setLang, loadLang, applyStatic } from "./i18n.js";
+import { isSessionError, sessionLabel, verNum, latestVersion, AD_PROBLEMS, adRank, reviewLines, ownerVerdict } from "./pure.js";
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -96,6 +97,10 @@ const AD_STATUS = {
 const state = {
   token: null, apiVersion: API_VERSION, accounts: [], fetchedAt: 0, truncated: false, owner: null,
   filter: "", statusFilter: null, cooldownUntil: 0, usage: null, cookies: [],
+  // A token Graph reported as dead ({ token, code }): no request is sent with it again. Any other token clears it.
+  // Persisted (storage.session) and, like the rate locks, not cleared by "reset token".
+  dead: null,
+  checked: null,                                     // last token↔c_user answer: { token, user, verdict, meId }
   // Rate locks survive popup reopen and "reset token" (storage.session), unlike the data cache.
   locks: { accountsAt: 0, ads: {} },
   open: new Set(), ads: {}, adsBusy: new Set(), adsHidden: new Set(),
@@ -109,12 +114,12 @@ class Stale extends Error {}
 
 // ---------- utils ----------
 function toast(msg, err = false) {
-  const t = $("#toast");
-  t.textContent = msg;
-  t.classList.toggle("err", err);
-  t.classList.add("show");
+  const box = $("#toast");
+  box.textContent = msg;
+  box.classList.toggle("err", err);
+  box.classList.add("show");
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove("show"), 2600);
+  toast._t = setTimeout(() => box.classList.remove("show"), 2600);
 }
 async function copy(text, label = t("copied")) {
   try { await navigator.clipboard.writeText(text); toast(label); return true; }
@@ -178,10 +183,10 @@ function isFacebookUrl(url) {
 // ---------- storage ----------
 async function loadState() {
   // storage.session is wiped on extension update/reload, so a cache is always from this API_VERSION.
-  const ses = await chrome.storage.session.get(["token", "tokenSource", ...CACHE_KEYS, "cooldownUntil", "usage", "locks"]);
+  const ses = await chrome.storage.session.get(["token", "tokenSource", "dead", ...CACHE_KEYS, "cooldownUntil", "usage", "locks"]);
   try { const { apiVersion } = await chrome.storage.local.get("apiVersion"); adoptVersion(apiVersion, false); } catch { /* */ }
   Object.assign(state, {
-    token: ses.token || null, tokenSource: ses.tokenSource || null,
+    token: ses.token || null, tokenSource: ses.tokenSource || null, dead: ses.dead || null,
     accounts: ses.accounts || [], fetchedAt: ses.fetchedAt || 0, truncated: !!ses.truncated, owner: ses.owner || null,
     ads: ses.ads || {}, open: new Set(ses.view?.open), adsHidden: new Set(ses.view?.hidden),
     cooldownUntil: ses.cooldownUntil || 0, usage: ses.usage ?? null,
@@ -238,11 +243,10 @@ function dropCache() {
 }
 
 // ---------- Graph ----------
-const verNum = (v) => { const m = /^v(\d+)\.(\d+)$/.exec(v || ""); return m ? Number(m[1]) * 100 + Number(m[2]) : 0; };
 // Switch to a newer API version named in Graph's text (upgrade warning, #2635, or our own storage).
 // Only forward, and only a few majors ahead: a garbled message must not send us to v999.
 function adoptVersion(text, persist = true) {
-  const v = /v\d+\.\d+/.exec(text || "")?.[0];
+  const v = latestVersion(text);                      // the newest one named, not the first
   const n = verNum(v), cur = verNum(state.apiVersion);
   if (!n || n <= cur || n > cur + 500) return false;
   state.apiVersion = v;
@@ -279,11 +283,29 @@ function startCooldown() {
   renderUsage();
 }
 
+// The token is dead (Graph said so earlier): every call refuses before the network, so a dead login is never hammered.
+const isDead = () => !!state.token && state.token === state.dead?.token;
+function sessionError(code) {
+  const err = new Error(t("err.session", { c: code }));
+  err.session = true;
+  return err;
+}
+function markDead(token, code) {
+  state.dead = { token, code };
+  saveSession({ dead: state.dead });
+  renderToken();
+}
+function clearDead() {
+  state.dead = null;
+  chrome.storage.session.remove("dead");
+}
+
 // One GET. The token and generation are fixed when the call starts.
 // retried: already re-sent once after #2635 moved us to a newer API version.
 async function graph(path, params = {}, retried = false) {
   const token = state.token, gen = state.gen, ctl = state.ctl;
   if (!token) throw new Error(t("err.noToken"));
+  if (token === state.dead?.token) throw sessionError(state.dead.code);
   const left = state.cooldownUntil - Date.now();
   if (left > 0) throw new Error(t("err.cooldown", { n: Math.ceil(left / 60000) }));
   const qs = new URLSearchParams(params).toString();
@@ -309,6 +331,12 @@ async function graph(path, params = {}, retried = false) {
   if (e?.code === DEPRECATED_VERSION_CODE) {
     if (!retried && adoptVersion(e.message)) return graph(path, params, true);
     throw new Error(t("err.version", { v: state.apiVersion }));
+  }
+  // Invalid / expired token, checkpoint, password changed: nothing will work until FB hands out a new token.
+  if (e && isSessionError(e.code, e.error_subcode)) {
+    const code = sessionLabel(e.code, e.error_subcode);
+    markDead(token, code);
+    throw sessionError(code);
   }
   if (e) {
     const err = new Error(e.error_user_msg || e.message || t("err.graph"));
@@ -349,24 +377,28 @@ function grabInPage() {
   // Inline scripts first: that's where the page embeds its tokens, and it's far cheaper than serializing
   // the whole DOM (megabytes on Ads Manager). The full HTML only if the scripts had none.
   for (const sc of document.scripts) if (!sc.src) scan(sc.textContent);
-  if (!out.size) scan(document.documentElement.innerHTML);
+  // The rendered DOM is the last resort. On feed / profile / group pages it is other people's text (a comment can
+  // contain anything shaped like a token), so there it is read only on ads and billing pages.
+  const ugcHost = /^(www|web|m|mbasic)\.facebook\.com$|^facebook\.com$/.test(location.hostname);
+  const adsPath = /^\/(ads|adsmanager)(\/|$)|billing/.test(location.pathname);
+  if (!out.size && (!ugcHost || adsPath)) scan(document.documentElement.innerHTML);
   return { ...base, primary: null, tokens: [...out] };
 }
 // FB tabs to read, best first: the active tab (if it's FB), then Ads Manager tabs, then the most recent.
 async function facebookTabs() {
   const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const isFb = (t) => t?.url && isFacebookUrl(t.url) && !t.discarded;
-  const tabs = (await chrome.tabs.query({ url: ["https://*.facebook.com/*"] })).filter((t) => isFb(t) && t.id !== active?.id);
+  const isFb = (tab) => tab?.url && isFacebookUrl(tab.url) && !tab.discarded;
+  const tabs = (await chrome.tabs.query({ url: ["https://*.facebook.com/*"] })).filter((tab) => isFb(tab) && tab.id !== active?.id);
   tabs.sort((a, b) => (/adsmanager/.test(b.url) - /adsmanager/.test(a.url)) || ((b.lastAccessed || 0) - (a.lastAccessed || 0)));
   return isFb(active) ? [active, ...tabs] : tabs;
 }
 // Best token from one page's answer: the page's own token (matches its surface), then the EAAB heuristic,
 // then anything. Every candidate is re-checked against TOKEN_RE — the MAIN world could return anything.
 function pickToken(r) {
-  const valid = (t) => typeof t === "string" && TOKEN_RE.test(t);
+  const valid = (s) => typeof s === "string" && TOKEN_RE.test(s);
   if (valid(r?.primary)) return r.primary;
   const tokens = Array.isArray(r?.tokens) ? r.tokens.filter(valid) : [];
-  return tokens.find((t) => t.startsWith("EAAB")) || tokens[0] || null;
+  return tokens.find((s) => s.startsWith("EAAB")) || tokens[0] || null;
 }
 // Reads a fresh token from the FB tabs. Returns it, or null after showing why — never the old cached one.
 // The field only ever shows a token some open FB tab has right now: with no FB tab, or none with a token,
@@ -411,6 +443,7 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
     gen = state.gen;                                   // our own bump, not a reset
     state.token = pick;
   }
+  if (state.dead && state.dead.token !== pick) clearDead();   // a different token: the dead one no longer matters
   if (await checkOwner() && current()) renderAccounts();
   if (!current()) return null;
   state.token = pick;
@@ -448,6 +481,7 @@ function renderToken(hint) {
   fill(card,
     el("div", { class: "kind-head" }, el("span", { class: "kind-badge" }, kind), el("span", { class: "kind-app" }, k.app || t("kind.unknown.app"))),
     el("div", { class: "kind-use" }, k.app ? t(`kind.${kind}`) : t("kind.unknown.use")),
+    isDead() ? el("div", { class: "err-text" }, t("kind.dead", { c: state.dead.code })) : null,
     // ads-capable → nothing; known non-ads → "not an ads token" + link; unknown → bare link only.
     k.ads === true ? null : adsLink(k.ads === false ? t("kind.notAds") : null),
   );
@@ -544,6 +578,24 @@ async function copyCookies(asJson) {
   copy(asJson ? cookiesJson() : cookieHeader(), asJson ? t("ck.jsonCopied") : t("ck.copied"));
 }
 // ---------- token + cookie block ----------
+// Whose token is it — the logged-in user's (c_user)? One /me read, remembered per token + login.
+// An open FB tab can keep a token from before the profile switched accounts; exporting it next to the new
+// cookies would hand out a pair that never worked. Throws Stale / a dead-session error; any other failure
+// (network, API pause) is "unknown" and does not block the export.
+async function ownerCheck(token) {
+  const user = cookieMap().c_user?.value || null;
+  if (state.checked?.token === token && state.checked.user === user) return state.checked;
+  let meId = null, verdict = "unknown";
+  try {
+    meId = (await graph("me", { fields: "id" })).id;
+    verdict = ownerVerdict(!!TOKEN_KIND[token.slice(0, 4)], meId, user);
+  } catch (e) {
+    if (e instanceof Stale || e.session) throw e;
+  }
+  const res = { token, user, verdict, meId };
+  if (verdict !== "unknown") state.checked = res;
+  return res;
+}
 async function copyEnv() {
   // Always a fresh token + a cookie snapshot taken right after it; nothing from the old cache.
   const token = await grabToken({ toClipboard: false });
@@ -552,7 +604,13 @@ async function copyEnv() {
   await readCookies();
   if (gen !== state.gen || state.token !== token) return;
   if (!hasSession()) return toast(t("ck.noSession"), true);
-  copy(`${token}\n\n${cookieHeader()}`, t("env.copied"));   // token, blank line, cookie header — nothing else
+  let own;
+  try { own = await ownerCheck(token); }
+  catch (e) { if (!(e instanceof Stale)) toast(e.message, true); return; }
+  if (gen !== state.gen || state.token !== token) return;
+  if (own.verdict === "mismatch") return toast(t("env.mismatch", { a: own.meId, b: own.user }), true);
+  // token, blank line, cookie header — nothing else
+  copy(`${token}\n\n${cookieHeader()}`, own.verdict === "ok" ? t("env.copied") : t("env.unverified"));
 }
 
 // ---------- accounts ----------
@@ -572,6 +630,7 @@ const slim = (a) => ({ ...a, _noInsights: state.skip.has("insights") || undefine
 
 async function fetchAccounts() {
   if (!state.token && !(await grabToken({ toClipboard: false }))) return;   // no token: grabToken says why
+  if (isDead()) return toast(t("err.session", { c: state.dead.code }), true);   // before the slot: costs nothing
   const gen = state.gen;                              // fixed before waiting for the lock
   let wait;
   try { wait = await claimSlot("accounts"); }        // before sending: a failed attempt counts too
@@ -604,7 +663,7 @@ async function fetchAccounts() {
     // Another user's list: their ads and open rows don't belong to this one.
     if (owner !== state.owner) Object.assign(state, { open: new Set(), ads: {}, adsHidden: new Set() });
     Object.assign(state, { accounts: rows, fetchedAt: Date.now(), truncated: !!after, owner });
-    await saveSession({ accounts: rows, fetchedAt: state.fetchedAt, truncated: state.truncated, owner, ads: state.ads });
+    await saveSession({ accounts: rows, fetchedAt: state.fetchedAt, truncated: state.truncated, owner, ads: adsToSave() });
     saveView();
     toast(t("acc.loaded", { n: rows.length }) + (after ? t("acc.truncated") : ""));
   } catch (e) {
@@ -687,9 +746,9 @@ function renderHint() {
   const totals = {};
   let unknown = false;
   for (const a of rows) {
-    const t = statsOf(a);
-    if (!t) { unknown = true; continue; }
-    if (t.spend) totals[a.currency] = (totals[a.currency] || 0) + t.spend;
+    const s = statsOf(a);
+    if (!s) { unknown = true; continue; }
+    if (s.spend) totals[a.currency] = (totals[a.currency] || 0) + s.spend;
   }
   const sum = Object.entries(totals).map(([cur, v]) => fmt(v, cur)).join(" + ");
   const label = t(PERIODS.find((p) => p.key === state.period).label);
@@ -813,9 +872,8 @@ function syncAdsButtons() {
   for (const b of $$("[data-ads]")) b.disabled = adsBlocked(b.dataset.ads);
 }
 const adsBox = (id) => document.querySelector(`[data-ads-box="${CSS.escape(id)}"]`);
-function reviewText(fb) {
-  return Object.values(fb?.global || {}).map((v) => (typeof v === "string" ? v : JSON.stringify(v))).join("; ");
-}
+// Only successful reads are kept across popup reopens: an error text would sit on the row long after it is stale.
+const adsToSave = () => Object.fromEntries(Object.entries(state.ads).filter(([, v]) => !v.error));
 // Before the first load: one "Ads" button. After: a show/hide toggle (no request, uses the
 // cached list) + a refresh icon that re-reads Graph and is the only control bound to the 30 s lock.
 function adsControls(id) {
@@ -838,20 +896,35 @@ function renderAds(box, { ads, more, error }) {
   if (error) return fill(box, el("div", { class: "hint err-text" }, error));
   if (!ads.length) return fill(box, el("div", { class: "hint" }, t("ads.none")));
   const count = (st) => ads.filter((ad) => st.includes(ad.effective_status)).length;
-  const live = count(["ACTIVE"]), rejected = count(["DISAPPROVED", "WITH_ISSUES"]);
+  const live = count(["ACTIVE"]), rejected = count(AD_PROBLEMS);
   fill(box, el("div", { class: "ads-sum" },
       `${ads.length}${more ? "+" : ""} ${tn(ads.length, "ads.count")}`,
       live ? t("ads.live", { n: live }) : "", rejected ? el("span", { class: "err-text" }, t("ads.rejected", { n: rejected })) : ""),
-    ...ads.map((ad) => {
+    // Disapproved / with issues first, each with every reason and the placement it applies to.
+    ...[...ads].sort((a, b) => adRank(a.effective_status) - adRank(b.effective_status)).map((ad) => {
     const st = ad.effective_status;
     const [l, tone] = st in AD_STATUS ? [t(`ad.${st}`), AD_STATUS[st]] : [st, ""];
-    const reasons = reviewText(ad.ad_review_feedback);
-    return el("div", { class: "ad" }, el("span", {}, ad.name), pill(l, tone), reasons ? el("small", {}, reasons) : null);
+    const why = reviewLines(ad);
+    return el("div", { class: "ad" }, el("span", {}, ad.name), pill(l, tone),
+      why.length ? el("small", {}, why.map((line) => el("span", { class: "why" }, line))) : null);
   }), ...(more ? [el("div", { class: "hint" }, t("ads.more", { n: ads.length }))] : []));
+}
+// One GET of an account's ads. issues_info (the reason for "with issues") is optional like the account fields:
+// if Graph rejects it, the call is repeated once without it.
+async function readAds(id, extra = {}) {
+  for (;;) {
+    const fields = `id,name,effective_status,ad_review_feedback${state.skip.has("issues_info") ? "" : ",issues_info"}`;
+    try { return await graph(`act_${id}/ads`, { fields, limit: "100", ...extra }); }
+    catch (e) {
+      if (e instanceof Stale || state.skip.has("issues_info") || !(e.raw || e.message || "").includes("issues_info")) throw e;
+      state.skip.add("issues_info");
+    }
+  }
 }
 async function loadAds(id) {
   if (state.adsBusy.has(id)) return;
   if (!state.token && !(await grabToken({ toClipboard: false }))) return;
+  if (isDead()) return toast(t("err.session", { c: state.dead.code }), true);
   const gen = state.gen, busy = state.adsBusy;        // fixed before waiting for the lock
   busy.add(id);
   syncAdsButtons();
@@ -868,18 +941,32 @@ async function loadAds(id) {
   const box = adsBox(id);
   if (box) fill(box, el("div", { class: "hint" }, t("ads.loading")));
   try {
-    const res = await graph(`act_${id}/ads`, { fields: "name,effective_status,ad_review_feedback", limit: "100" });
+    const res = await readAds(id);
     if (!Array.isArray(res.data)) throw new Error(t("err.noData"));
-    state.ads[id] = { ads: res.data, more: !!res.paging?.next };
+    let list = res.data;
+    if (res.paging?.next) {
+      // More than one page: the ads that need attention must not hide behind the first 100.
+      try {
+        const bad = await readAds(id, { effective_status: JSON.stringify(AD_PROBLEMS) });
+        const have = new Set(list.map((a) => a.id));
+        if (Array.isArray(bad.data)) list = list.concat(bad.data.filter((a) => !have.has(a.id)));
+      } catch (e) {
+        if (e instanceof Stale) throw e;
+        toast(e.message, true);                        // the first page is still worth showing
+      }
+    }
+    state.ads[id] = { ads: list, more: !!res.paging?.next };
   } catch (e) {
     if (e instanceof Stale) return;
-    state.ads[id] = { ads: [], error: e.message };
+    // A failed refresh must not wipe the list you already have (a pause, a dead session, a timeout).
+    if (state.ads[id] && !state.ads[id].error) toast(e.message, true);
+    else state.ads[id] = { ads: [], error: e.message };
   } finally {
     busy.delete(id);                                    // our generation's set, not a newer one's
     syncAdsButtons();
   }
   state.adsHidden.delete(id);                           // a fresh load is shown expanded
-  saveSession({ ads: state.ads }); saveView();
+  saveSession({ ads: adsToSave() }); saveView();
   renderAccounts();
 }
 
@@ -897,9 +984,9 @@ async function clearSession() {
 
 // ---------- wiring ----------
 function switchTab(name) {
-  $$(".tab").forEach((t) => {
-    const on = t.dataset.tab === name;
-    t.classList.toggle("active", on); t.setAttribute("aria-selected", String(on)); t.tabIndex = on ? 0 : -1;
+  $$(".tab").forEach((tab) => {
+    const on = tab.dataset.tab === name;
+    tab.classList.toggle("active", on); tab.setAttribute("aria-selected", String(on)); tab.tabIndex = on ? 0 : -1;
   });
   $$(".panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${name}`));
   try { localStorage.setItem("tab", name); } catch { /* */ }
@@ -920,7 +1007,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadLang(); applyStatic();
   $$("[data-lang]").forEach((b) => b.addEventListener("click", () => switchLang(b.dataset.lang)));
   await loadState();
-  $$(".tab").forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+  $$(".tab").forEach((tab) => tab.addEventListener("click", () => switchTab(tab.dataset.tab)));
   // WAI-ARIA tabs: arrows / Home / End move between tabs; Tab key goes straight into the panel.
   $(".tabs").addEventListener("keydown", (ev) => {
     const tabs = $$(".tab"), i = tabs.indexOf(document.activeElement), n = tabs.length;
@@ -930,7 +1017,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     ev.preventDefault(); switchTab(tabs[j].dataset.tab); tabs[j].focus();
   });
   let lastTab = "token";
-  try { const t = localStorage.getItem("tab"); if ($$(".tab").some((x) => x.dataset.tab === t)) lastTab = t; } catch { /* */ }
+  try { const saved = localStorage.getItem("tab"); if ($$(".tab").some((x) => x.dataset.tab === saved)) lastTab = saved; } catch { /* */ }
   switchTab(lastTab);                                   // always: it also sets the roving tabindex
   try { const p = localStorage.getItem("period"); if (PERIODS.some((x) => x.key === p)) state.period = p; } catch { /* */ }
   renderPeriods();
@@ -953,6 +1040,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   chrome.storage.session.onChanged?.addListener((ch) => {
     if (ch.cooldownUntil) { state.cooldownUntil = ch.cooldownUntil.newValue || 0; renderUsage(); }
     if (ch.locks) { state.locks = ch.locks.newValue || { accountsAt: 0, ads: {} }; syncAdsButtons(); }
+    // Another window found the token dead (or a new token replaced it): follow.
+    if (ch.dead && (ch.dead.newValue?.token || null) !== (state.dead?.token || null)) { state.dead = ch.dead.newValue || null; renderToken(); }
     // Token reset or replaced in another window of this extension: drop ours too.
     if (ch.token && (ch.token.newValue || null) !== state.token) {
       newGeneration(); state.grabOp++;

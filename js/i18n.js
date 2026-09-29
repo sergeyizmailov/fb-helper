@@ -32,6 +32,7 @@ const D = {
     "kind.EAAI": "Настройка автоправил.",
     "kind.unknown.app": "Другое приложение Meta", "kind.unknown.use": "Нажми «Проверить» — покажу приложение и права.",
     "kind.notAds": "Сейчас это не рекламный токен. ", "kind.goAds": "Перейти в Ads Manager", "kind.from": "Взят со вкладки: {s}",
+    "kind.dead": "Сессия этого токена закрыта (код {c}) — запросы к Graph остановлены.",
     "surface.billing": "Биллинг", "surface.bm": "Настройки БМ",
 
     "period.today": "Сегодня", "period.yesterday": "Вчера", "period.week": "7 дней", "period.month": "30 дней", "period.all": "Всё время",
@@ -60,6 +61,7 @@ const D = {
     "err.version": "Версия Graph API {v} устарела, а новую Graph не назвал — обнови расширение (API_VERSION в popup.js)",
     "err.graph": "Ошибка Graph", "err.empty": "Пустой ответ Graph", "err.noData": "Неожиданный ответ Graph (нет data)",
     "err.slot": "Не удалось занять слот запроса: {m}",
+    "err.session": "Сессия недействительна (код {c}) — запросы остановлены. Обнови вкладку FB или войди заново",
 
     "grab.noTab": "Открой Facebook в этом профиле", "grab.noAccess": "Нет доступа к вкладке FB — обнови её",
     "grab.notFound": "Токен не найден на {where}", "grab.thisTab": "этой вкладке", "grab.openTabs": "открытых вкладках Facebook",
@@ -74,6 +76,8 @@ const D = {
     "ck.none": "Cookie не найдены", "ck.loggedIn": "Вход выполнен", "ck.until": "сессия до ", "ck.untilClose": "сессия до закрытия браузера",
     "ck.count": ["cookie", "cookie", "cookie"], "ck.loggedOut": "Не залогинен в Facebook", "ck.noSession": "Нет c_user / xs — залогинься в FB",
     "ck.jsonCopied": "JSON скопирован", "ck.copied": "Cookie скопированы", "env.copied": "Токен + cookie скопированы",
+    "env.mismatch": "Токен от другого аккаунта ({a}), а cookie — {b}. Обнови вкладку FB",
+    "env.unverified": "Токен + cookie скопированы — владелец токена не проверен",
 
     "acc.wait": "Обновить можно через {n} с", "acc.loaded": "Кабинетов: {n}", "acc.truncated": " (не все — лимит 10 страниц)",
     "acc.noLive": "Активных кабинетов нет", "acc.idsCopied": "Скопировано ID: {n}", "acc.partial": " (список неполный)",
@@ -92,7 +96,7 @@ const D = {
 
     "ads.btn": "Объявления", "ads.collapse": "Свернуть объявления", "ads.refresh": "Обновить объявления", "ads.none": "Объявлений нет",
     "ads.count": ["объявление", "объявления", "объявлений"], "ads.live": " · {n} активно", "ads.rejected": " · {n} отклонено",
-    "ads.more": "Показаны первые {n} — остальное в Ads Manager", "ads.wait": "Объявления этого кабинета можно запросить раз в 30 с",
+    "ads.more": "Показано {n}, есть ещё — остальное в Ads Manager", "ads.wait": "Объявления этого кабинета можно запросить раз в 30 с",
     "ads.loading": "Загрузка…", "reset.done": "Токен и кэш удалены",
   },
   en: {
@@ -120,6 +124,7 @@ const D = {
     "kind.EAAI": "Automated rules.",
     "kind.unknown.app": "Another Meta app", "kind.unknown.use": "Press “Check” to see the app and its permissions.",
     "kind.notAds": "This is not an ads token. ", "kind.goAds": "Open Ads Manager", "kind.from": "Taken from tab: {s}",
+    "kind.dead": "This token's session is closed (code {c}) — Graph requests are stopped.",
     "surface.billing": "Billing", "surface.bm": "Business settings",
 
     "period.today": "Today", "period.yesterday": "Yesterday", "period.week": "7 days", "period.month": "30 days", "period.all": "All time",
@@ -148,6 +153,7 @@ const D = {
     "err.version": "Graph API {v} is deprecated and Graph named no newer one — update the extension (API_VERSION in popup.js)",
     "err.graph": "Graph error", "err.empty": "Empty Graph response", "err.noData": "Unexpected Graph response (no data)",
     "err.slot": "Could not claim a request slot: {m}",
+    "err.session": "Session is no longer valid (code {c}) — requests stopped. Reload the FB tab or log in again",
 
     "grab.noTab": "Open Facebook in this profile", "grab.noAccess": "No access to the FB tab — reload it",
     "grab.notFound": "No token found on {where}", "grab.thisTab": "this tab", "grab.openTabs": "the open Facebook tabs",
@@ -162,6 +168,8 @@ const D = {
     "ck.none": "No cookies found", "ck.loggedIn": "Logged in", "ck.until": "session until ", "ck.untilClose": "session until the browser closes",
     "ck.count": ["cookie", "cookies"], "ck.loggedOut": "Not logged in to Facebook", "ck.noSession": "No c_user / xs — log in to FB",
     "ck.jsonCopied": "JSON copied", "ck.copied": "Cookies copied", "env.copied": "Token + cookies copied",
+    "env.mismatch": "The token belongs to another account ({a}), the cookies to {b}. Reload the FB tab",
+    "env.unverified": "Token + cookies copied — token owner not verified",
 
     "acc.wait": "Refresh available in {n} s", "acc.loaded": "Ad accounts: {n}", "acc.truncated": " (not all — 10-page limit)",
     "acc.noLive": "No active ad accounts", "acc.idsCopied": "Copied IDs: {n}", "acc.partial": " (list incomplete)",
@@ -180,7 +188,7 @@ const D = {
 
     "ads.btn": "Ads", "ads.collapse": "Hide ads", "ads.refresh": "Refresh ads", "ads.none": "No ads",
     "ads.count": ["ad", "ads"], "ads.live": " · {n} active", "ads.rejected": " · {n} disapproved",
-    "ads.more": "First {n} shown — the rest is in Ads Manager", "ads.wait": "Ads of one account can be requested once per 30 s",
+    "ads.more": "Showing {n}, more exist — the rest is in Ads Manager", "ads.wait": "Ads of one account can be requested once per 30 s",
     "ads.loading": "Loading…", "reset.done": "Token and cache cleared",
   },
 };

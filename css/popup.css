@@ -332,6 +332,7 @@ main { padding-bottom: 0; }
 .ad { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--spacing-2); align-items: center; padding: var(--spacing-2) 0; border-top: 1px solid var(--color-border); }
 .ad > span:first-child { overflow-wrap: anywhere; }
 .ad small { grid-column: 1 / -1; color: var(--color-error); overflow-wrap: anywhere; }
+.ad small .why { display: block; }
 .empty { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-4); }
 
 .toast {

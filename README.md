@@ -18,19 +18,28 @@ Chrome 121+. A Facebook tab must be open in the same profile; the ads token (EAA
 
 - **Language** — English and Russian, `RU · EN` toggle in the header. The first run follows the browser's UI language; after that the choice is yours, stored in `chrome.storage.local`, and survives a browser restart. English account statuses and disable reasons use the Marketing API names (`Unsettled`, `Ads integrity policy`, …), the same as Ads Manager.
 - **Token** — reads the token from the open FB tab and shows its type: EAAB (Ads Manager), EAAI (Automated Rules), EAAG (Business Manager), EAAH (Commerce Manager), EAAd (Events Manager). Each type links to the page where that token lives. **Check** shows the profile, the app and the permissions behind the token.
-- **Cookies** — as a header string or as JSON with attributes for importing into a browser profile; **Token + cookies** copies both in one block.
-- **Ad accounts** — status, disable reason, spend per period (today / yesterday / 7 / 30 days / lifetime), clicks and CPC, daily limit, billing threshold, payment method, pixels, business owner; ads with statuses and rejection reasons. The loaded list and ads are kept until the browser closes and survive FB tab or token changes; logging in as another FB user drops them.
+- **Cookies** — as a header string or as JSON with attributes for importing into a browser profile; **Token + cookies** copies both in one block, after one `/me` read confirms the token belongs to the logged-in user (`c_user`). A token from another account is not copied.
+- **Ad accounts** — status, disable reason, spend per period (today / yesterday / 7 / 30 days / lifetime), clicks and CPC, daily limit, billing threshold, payment method, pixels, business owner; ads with statuses and rejection reasons (every reason with the placement it applies to; disapproved ads first). The loaded list and ads are kept until the browser closes and survive FB tab or token changes; logging in as another FB user drops them.
 
 ## Safety and limits
 
 - Requests go only to `graph.facebook.com` and only on a button press. The token is shown only while an open Facebook tab has it and is never stored beyond the browser session.
-- The account list refreshes at most once a minute, one account's ads at most once per 30 s. On an API rate-limit error all requests stop for 30 min.
+- The account list refreshes at most once a minute, one account's ads at most once per 30 s. On an API rate-limit error all requests stop for 30 min. On a dead session (error 190, subcodes 459 / 460 / 463 / 467) requests with that token stop until Facebook hands out a new one.
 - Graph API version: `v26.0`. When Meta retires it, the extension switches to the newer version Graph names.
 
 ## Build the archive
 
+An explicit list of what ships, so stray files in the folder never end up in the zip:
+
 ```
-git ls-files -co --exclude-standard | grep -v '^\.git' | grep -v '^docs/' | grep -v '\.zip$' | zip -q fb-helper-2.1.0.zip -@
+zip -qrD fb-helper-2.1.0.zip manifest.json popup.html css js fonts images LICENSE README.md SECURITY.md CONTRIBUTING.md -x '*.DS_Store'
+```
+
+## Tests
+
+```
+node --test test/*.test.mjs   # unit tests, no browser (CI runs these)
+node test/e2e.mjs             # real Chromium + the unpacked extension, Facebook and Graph mocked; needs playwright-core
 ```
 
 Icons: Lucide (ISC). Font: Golos Text (SIL OFL 1.1). Licenses sit next to the files.
