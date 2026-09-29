@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Ads Helper — store screenshot</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;800&display=swap" rel="stylesheet">
+<style>
+  @font-face { font-family: Golos; font-weight: 400 600; src: url(../../fonts/golostext-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2000-206F; }
+  /* Store screenshot: exactly 1280×800 at 1×. Same design as cover.html, content centred in the taller canvas. */
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1280px; height: 800px; overflow: hidden; background: #F0F2F5; color: #1C1E21; font-family: Manrope, Golos, sans-serif;
+         display: flex; flex-direction: column; justify-content: center; gap: 44px; padding: 0 40px; }
+  .head { text-align: center; }
+  h1 { display: flex; align-items: center; justify-content: center; gap: 22px; font-size: 80px; line-height: 1; font-weight: 800; letter-spacing: -.035em; }
+  h1 img { width: 84px; height: 84px; }
+  h1 .v { color: #1B74E4; }
+  h2 { margin-top: 16px; font-size: 30px; line-height: 1; font-weight: 500; color: #606770; letter-spacing: -.01em; }
+  .row { display: flex; gap: 24px; align-items: flex-start; }
+  .card { flex: 1; background: #fff; border-radius: 10px; overflow: hidden; }
+  .card img { display: block; width: 100%; }
+</style>
+<div class="head">
+  <h1><img src="../icons/logo.webp" alt="">Ads Helper <span class="v">2.1.0</span></h1>
+  <h2>Chrome extension</h2>
+</div>
+<div class="row">
+  <div class="card"><img src="raw/check.png" alt=""></div>
+  <div class="card"><img src="raw/cookies.png" alt=""></div>
+  <div class="card"><img src="raw/accounts-cover.png" alt=""></div>
+</div>
+</html>

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Ads Helper — social preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;800&display=swap" rel="stylesheet">
+<style>
+  @font-face { font-family: Golos; font-weight: 400 600; src: url(../../fonts/golostext-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2000-206F; }
+  @font-face { font-family: Golos; font-weight: 400 600; src: url(../../fonts/golostext-cyrillic.woff2) format("woff2"); unicode-range: U+0400-04FF; }
+  /* Canvas 1280×640 at 1×. */
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1280px; height: 640px; overflow: hidden; background: #F0F2F5; color: #1C1E21; font-family: Manrope, Golos, sans-serif; }
+  .head { text-align: center; padding-top: 40px; }
+  h1 { display: flex; align-items: center; justify-content: center; gap: 24px; font-size: 76px; line-height: 1; font-weight: 800; letter-spacing: -.035em; }
+  h1 img { width: 80px; height: 80px; }
+  h1 .v { color: #1B74E4; }
+  h2 { margin-top: 14px; font-size: 28px; line-height: 1; font-weight: 500; color: #606770; letter-spacing: -.01em; }
+  .row { position: absolute; left: 40px; right: 40px; top: 196px; display: flex; gap: 24px; align-items: flex-start; }
+  .card { flex: 1; background: #fff; border-radius: 10px; overflow: hidden; }
+  .card img { display: block; width: 100%; }
+</style>
+<div class="head">
+  <h1><img src="../icons/logo.webp" alt="">Ads Helper <span class="v">2.1.0</span></h1>
+  <h2>Chrome extension</h2>
+</div>
+<div class="row">
+  <div class="card"><img src="raw/check.png" alt=""></div>
+  <div class="card"><img src="raw/cookies.png" alt=""></div>
+  <div class="card"><img src="raw/accounts-cover.png" alt=""></div>
+</div>
+</html>
