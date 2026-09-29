@@ -97,8 +97,8 @@ const AD_STATUS = {
 const state = {
   token: null, apiVersion: API_VERSION, accounts: [], fetchedAt: 0, truncated: false, owner: null,
   filter: "", statusFilter: null, cooldownUntil: 0, usage: null, cookies: [],
-  // A token Graph reported as dead ({ token, code }): no request is sent with it again. Any other token clears it.
-  // Persisted (storage.session) and, like the rate locks, not cleared by "reset token".
+  // A token Graph reported as dead ({ token, code }): no request is sent with it again. Cleared by any other token
+  // or by "reset token" (the deliberate way to try the same token once more). Persisted in storage.session.
   dead: null,
   checked: null,                                     // last token↔c_user answer: { token, user, verdict, meId }
   // Rate locks survive popup reopen and "reset token" (storage.session), unlike the data cache.
@@ -246,9 +246,10 @@ function dropCache() {
 // Switch to a newer API version named in Graph's text (upgrade warning, #2635, or our own storage).
 // Only forward, and only a few majors ahead: a garbled message must not send us to v999.
 function adoptVersion(text, persist = true) {
-  const v = latestVersion(text);                      // the newest one named, not the first
-  const n = verNum(v), cur = verNum(state.apiVersion);
-  if (!n || n <= cur || n > cur + 500) return false;
+  const cur = verNum(state.apiVersion);
+  const v = latestVersion(text, cur + 500);           // the newest one named (within reach), not the first
+  const n = verNum(v);
+  if (!n || n <= cur) return false;
   state.apiVersion = v;
   if (persist) chrome.storage.local.set({ apiVersion: v }).catch(() => {});
   return true;
@@ -380,7 +381,7 @@ function grabInPage() {
   // The rendered DOM is the last resort. On feed / profile / group pages it is other people's text (a comment can
   // contain anything shaped like a token), so there it is read only on ads and billing pages.
   const ugcHost = /^(www|web|m|mbasic)\.facebook\.com$|^facebook\.com$/.test(location.hostname);
-  const adsPath = /^\/(ads|adsmanager)(\/|$)|billing/.test(location.pathname);
+  const adsPath = /^\/(ads|adsmanager|billing[\w-]*)(\/|$)/.test(location.pathname);   // path PREFIX, not any "billing" inside a slug
   if (!out.size && (!ugcHost || adsPath)) scan(document.documentElement.innerHTML);
   return { ...base, primary: null, tokens: [...out] };
 }
@@ -604,6 +605,7 @@ async function copyEnv() {
   await readCookies();
   if (gen !== state.gen || state.token !== token) return;
   if (!hasSession()) return toast(t("ck.noSession"), true);
+  if (isDead()) return toast(t("err.session", { c: state.dead.code }), true);   // even when the owner check is cached
   let own;
   try { own = await ownerCheck(token); }
   catch (e) { if (!(e instanceof Stale)) toast(e.message, true); return; }
@@ -873,7 +875,7 @@ function syncAdsButtons() {
 }
 const adsBox = (id) => document.querySelector(`[data-ads-box="${CSS.escape(id)}"]`);
 // Only successful reads are kept across popup reopens: an error text would sit on the row long after it is stale.
-const adsToSave = () => Object.fromEntries(Object.entries(state.ads).filter(([, v]) => !v.error));
+const adsToSave = () => Object.fromEntries(Object.entries(state.ads).filter(([, v]) => !v.error).map(([k, { stale, ...v }]) => [k, v]));
 // Before the first load: one "Ads" button. After: a show/hide toggle (no request, uses the
 // cached list) + a refresh icon that re-reads Graph and is the only control bound to the 30 s lock.
 function adsControls(id) {
@@ -889,7 +891,7 @@ function adsControls(id) {
     el("button", { class: "icon-btn sm", "data-ads": id, "data-focus": `ads:${id}`, disabled: adsBlocked(id), title: t("ads.refresh"),
                    "aria-label": t("ads.refresh"), onclick: () => loadAds(id) }, el("i", { class: "i i-refresh" })));
 }
-function renderAds(box, { ads, more, error }) {
+function renderAds(box, { ads, more, error, stale }) {
   if (!box) return;
   const id = box.dataset.adsBox;
   if (state.adsHidden.has(id)) return fill(box);
@@ -900,6 +902,7 @@ function renderAds(box, { ads, more, error }) {
   fill(box, el("div", { class: "ads-sum" },
       `${ads.length}${more ? "+" : ""} ${tn(ads.length, "ads.count")}`,
       live ? t("ads.live", { n: live }) : "", rejected ? el("span", { class: "err-text" }, t("ads.rejected", { n: rejected })) : ""),
+    stale ? el("div", { class: "hint err-text" }, t("ads.stale", { m: stale })) : null,
     // Disapproved / with issues first, each with every reason and the placement it applies to.
     ...[...ads].sort((a, b) => adRank(a.effective_status) - adRank(b.effective_status)).map((ad) => {
     const st = ad.effective_status;
@@ -958,8 +961,10 @@ async function loadAds(id) {
     state.ads[id] = { ads: list, more: !!res.paging?.next };
   } catch (e) {
     if (e instanceof Stale) return;
-    // A failed refresh must not wipe the list you already have (a pause, a dead session, a timeout).
-    if (state.ads[id] && !state.ads[id].error) toast(e.message, true);
+    // A failed refresh must not wipe the list you already have (a pause, a dead session, a timeout),
+    // but the row says the list is old.
+    const prev = state.ads[id];
+    if (prev && !prev.error) { state.ads[id] = { ...prev, stale: e.message }; toast(e.message, true); }
     else state.ads[id] = { ads: [], error: e.message };
   } finally {
     busy.delete(id);                                    // our generation's set, not a newer one's
@@ -974,9 +979,10 @@ async function clearSession() {
   // Cancel first (synchronously): in-flight grabs and requests must not write the token back.
   newGeneration();
   state.grabOp++;
-  Object.assign(state, { token: null, tokenSource: null, usage: null, filter: "", statusFilter: null });
+  Object.assign(state, { token: null, tokenSource: null, usage: null, filter: "", statusFilter: null, dead: null, checked: null });
   // Rate locks and the throttle pause stay: a reset must not become a way around them.
-  await Promise.all([dropCache(), chrome.storage.session.remove(["token", "tokenSource", "usage"])]);
+  // The dead-token record goes: it holds the token itself, and a reset is the user's call to try again.
+  await Promise.all([dropCache(), chrome.storage.session.remove(["token", "tokenSource", "usage", "dead"])]);
   $("#accountFilter").value = "";
   renderToken(); renderAccounts(); renderUsage();
   toast(t("reset.done"));

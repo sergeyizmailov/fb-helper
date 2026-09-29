@@ -13,9 +13,11 @@ export const sessionLabel = (code, subcode) => (subcode ? `${code}/${subcode}` :
 export const verNum = (v) => { const m = /^v(\d+)\.(\d+)$/.exec(v || ""); return m ? Number(m[1]) * 100 + Number(m[2]) : 0; };
 // The newest version named anywhere in Graph's text. A warning may name the old version first
 // ("v26.0 is deprecated, upgraded to v27.0"), so the first match is not enough.
-export function latestVersion(text) {
+// cap: ignore versions above it (verNum scale), so a stray "v999.0" in the text cannot hide the real "v27.0".
+export function latestVersion(text, cap = Infinity) {
   let best = null;
-  for (const [v] of String(text || "").matchAll(/\bv\d+\.\d+\b/g)) if (!best || verNum(v) > verNum(best)) best = v;
+  for (const [v] of String(text || "").matchAll(/\bv\d+\.\d+\b/g))
+    if (verNum(v) <= cap && (!best || verNum(v) > verNum(best))) best = v;
   return best;
 }
 
@@ -30,6 +32,7 @@ const placeName = (s) => { const w = String(s).replace(/_/g, " "); return w.char
 //   ad_review_feedback.global              map<reason, description> — all placements
 //   ad_review_feedback.placement_specific  { facebook: map, instagram: map, … } — one placement only
 //   issues_info[]                          { error_summary, error_message } — the reason for WITH_ISSUES
+//                                          (read only for problem ads: a healthy ad must not show red text)
 export function reviewLines(ad) {
   const lines = [], seen = new Set();
   const add = (place, key, desc) => {
@@ -48,7 +51,8 @@ export function reviewLines(ad) {
   walk("", fb?.global);
   const ps = fb?.placement_specific;
   if (ps && typeof ps === "object" && !Array.isArray(ps)) for (const [place, v] of Object.entries(ps)) walk(place, v);
-  for (const i of Array.isArray(ad?.issues_info) ? ad.issues_info : []) add("", i?.error_summary, i?.error_message);
+  if (AD_PROBLEMS.includes(ad?.effective_status))
+    for (const i of Array.isArray(ad?.issues_info) ? ad.issues_info : []) add("", i?.error_summary, i?.error_message);
   return lines;
 }
 

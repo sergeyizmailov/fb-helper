@@ -18,6 +18,8 @@ test("latestVersion: the newest named, not the first", () => {
   assert.equal(latestVersion("update to the latest version: v27.0."), "v27.0");
   assert.equal(latestVersion("v9.0 and v26.1 and v26.0"), "v26.1");
   assert.equal(latestVersion("no version here"), null);
+  assert.equal(latestVersion("stray v999.0 in user data; update to the latest version: v27.0", verNum("v26.0") + 500), "v27.0", "cap hides absurd versions");
+  assert.equal(latestVersion("only v999.0", verNum("v26.0") + 500), null);
   assert.equal(latestVersion(null), null);
   assert.equal(latestVersion("dev12.3 or v1.2x"), null, "must be a whole word");
   assert.ok(verNum("v26.0") > verNum("v25.9"));
@@ -30,6 +32,7 @@ test("reviewLines: reasons with their keys, per placement, plus issues_info", ()
       global: { "Personal attributes": "Your ad implies knowledge of personal traits" },
       placement_specific: { instagram: { "Misleading claims": "The ad makes unrealistic claims" }, audience_network: { Sensational: "" } },
     },
+    effective_status: "WITH_ISSUES",
     issues_info: [{ error_summary: "Ad set has no budget", error_message: "Set a budget to deliver" }],
   };
   assert.deepEqual(reviewLines(ad), [
@@ -51,7 +54,13 @@ test("reviewLines: odd shapes never throw, duplicates collapse", () => {
   assert.deepEqual(reviewLines({ ad_review_feedback: null, issues_info: "x" }), []);
   assert.deepEqual(reviewLines({ ad_review_feedback: { global: ["A", "A", "B"], placement_specific: [1] } }), ["A", "B"]);
   assert.deepEqual(reviewLines({ ad_review_feedback: { global: { k: { nested: 1 } } } }), ['k — {"nested":1}']);
-  assert.deepEqual(reviewLines({ issues_info: [null, {}, { error_summary: "S" }] }), ["S"]);
+  assert.deepEqual(reviewLines({ effective_status: "WITH_ISSUES", issues_info: [null, {}, { error_summary: "S" }] }), ["S"]);
+});
+
+test("reviewLines: issues_info of a healthy ad is not shown (no red text on ACTIVE rows)", () => {
+  const info = [{ error_summary: "Ad set has no budget", error_message: "Set a budget" }];
+  for (const st of ["ACTIVE", "PAUSED", "PENDING_REVIEW", undefined]) assert.deepEqual(reviewLines({ effective_status: st, issues_info: info }), [], String(st));
+  assert.equal(reviewLines({ effective_status: "DISAPPROVED", issues_info: info }).length, 1);
 });
 
 test("adRank puts disapproved / with-issues first and keeps the rest stable", () => {

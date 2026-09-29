@@ -126,6 +126,9 @@ async function fallbackFlows() {
   for (const [url, expect] of [
     ["https://www.facebook.com/", false],
     ["https://www.facebook.com/groups/1/", false],
+    ["https://www.facebook.com/groups/billing-tips/posts/1", false],
+    ["https://www.facebook.com/billing.smith", false],
+    ["https://www.facebook.com/billing_hub/payment_settings", true],
     ["https://adsmanager.facebook.com/adsmanager/manage/campaigns", true],
     ["https://www.facebook.com/ads/manager/account_settings/account_billing/", true],
     ["https://business.facebook.com/settings/", true],
@@ -234,7 +237,7 @@ async function sessionFlows() {
 // ---------- ads: reasons, placements, issues_info, paging, failures ----------
 async function adsFlows() {
   console.log("\n# ads");
-  const base = { id: "a0", name: "Fine", effective_status: "ACTIVE" };
+  const base = { id: "a0", name: "Fine", effective_status: "ACTIVE", issues_info: [{ error_summary: "Soft note on a healthy ad", error_message: "ignore" }] };
   const rejected = { id: "a1", name: "Rejected", effective_status: "DISAPPROVED", ad_review_feedback: {
     global: { "Personal attributes": "Implies knowledge of personal traits" },
     placement_specific: { instagram: { "Misleading claims": "Unrealistic claims" } } } };
@@ -257,6 +260,7 @@ async function adsFlows() {
   ok("placement-specific reason shows the placement", has(body, "Instagram: Misleading claims — Unrealistic claims"), body);
   ok("rejection only on Instagram is explained (was empty)", has(body, "Instagram: Sensational content — Shocking"), body);
   ok("WITH_ISSUES reason comes from issues_info", has(body, "Ad set has no budget — Set a budget"), body);
+  ok("issues_info of a healthy ad stays hidden", !has(body, "Soft note"), body);
   ok("summary counts the rejected", has(await text(pop, ".ads-sum"), "3 disapproved"), await text(pop, ".ads-sum"));
   await b.ctx.close();
 
@@ -294,6 +298,8 @@ async function adsFlows() {
   const toast = await clickToast(pop, ".acc.open .icon-btn[data-ads]");
   ok("failed refresh: list kept", (await pop.locator(".ad").count()) === 1);
   ok("failed refresh: error toast", has(toast, "boom"), toast);
+  ok("failed refresh: the row says the list is old", has(await text(pop, ".ads"), "Not refreshed: boom"), await text(pop, ".ads"));
+  ok("…and that mark is not persisted", !JSON.stringify(await stored(pop, "ads")).includes("stale"));
   ok("stored ads have no error text", !JSON.stringify(await stored(pop, "ads")).includes("boom"));
   await b.ctx.close();
 
@@ -336,8 +342,33 @@ async function exportFlows() {
   await b.ctx.close();
 }
 
+// dead token + a cached "owner ok": still not exported; "reset token" is the way to try the same token again
+async function deadExportFlows() {
+  console.log("\n# dead token: export and reset");
+  let dead = false;
+  const b = await boot({ fb: adsFb(TOK), graph: (u) => dead && u.pathname.endsWith("/adaccounts") ? { status: 400, body: { error: { code: 190, error_subcode: 463, message: "expired" } } }
+    : u.pathname.endsWith("/me") ? { body: { id: "1001" } } : { body: accountsJson } });
+  await adsPage(b);
+  const pop = await popup(b, "token"); await captureClipboard(pop);
+  await clickToast(pop, "#copyEnv");
+  ok("first export is verified and copied", (await clip(pop)).length === 1);
+  dead = true;
+  await pop.click('[data-tab="accounts"]'); await clickToast(pop, "#loadAccounts");
+  await pop.click('[data-tab="token"]');
+  const t = await clickToast(pop, "#copyEnv");
+  ok("token now dead: export refused although the owner check is cached", (await clip(pop)).length === 1 && has(t, "no longer valid"), `${(await clip(pop)).length} ${t}`);
+  await pop.click("#clearSession");
+  ok("reset removes the dead record (it holds the token)", await until(pop, () => chrome.storage.session.get("dead").then((o) => !o.dead)));
+  dead = false; await resetLocks(pop);
+  await pop.click("#grabToken"); await boxWait(pop, /^EAAB/);
+  const before = b.hits.length;
+  await pop.click('[data-tab="accounts"]'); const ok2 = await loadAccounts(pop, 1);
+  ok("after reset the same token is tried again", ok2 && b.hits.length > before, `${b.hits.length} vs ${before}`);
+  await b.ctx.close();
+}
+
 const only = process.argv[2];
-const flows = { token: tokenFlows, fallback: fallbackFlows, version: versionFlows, cache: cacheFlows, session: sessionFlows, ads: adsFlows, export: exportFlows };
+const flows = { token: tokenFlows, fallback: fallbackFlows, version: versionFlows, cache: cacheFlows, session: sessionFlows, ads: adsFlows, export: exportFlows, deadexport: deadExportFlows };
 try {
   for (const [name, fn] of Object.entries(flows)) if (!only || only === name) await fn();
 } catch (e) { console.error("CRASH", e); fails++; }

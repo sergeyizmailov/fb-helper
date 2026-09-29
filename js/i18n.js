@@ -97,7 +97,7 @@ const D = {
     "ads.btn": "Объявления", "ads.collapse": "Свернуть объявления", "ads.refresh": "Обновить объявления", "ads.none": "Объявлений нет",
     "ads.count": ["объявление", "объявления", "объявлений"], "ads.live": " · {n} активно", "ads.rejected": " · {n} отклонено",
     "ads.more": "Показано {n}, есть ещё — остальное в Ads Manager", "ads.wait": "Объявления этого кабинета можно запросить раз в 30 с",
-    "ads.loading": "Загрузка…", "reset.done": "Токен и кэш удалены",
+    "ads.loading": "Загрузка…", "ads.stale": "Не обновилось: {m}. Показан прошлый список", "reset.done": "Токен и кэш удалены",
   },
   en: {
     "lang.title": "Interface language",
@@ -189,7 +189,7 @@ const D = {
     "ads.btn": "Ads", "ads.collapse": "Hide ads", "ads.refresh": "Refresh ads", "ads.none": "No ads",
     "ads.count": ["ad", "ads"], "ads.live": " · {n} active", "ads.rejected": " · {n} disapproved",
     "ads.more": "Showing {n}, more exist — the rest is in Ads Manager", "ads.wait": "Ads of one account can be requested once per 30 s",
-    "ads.loading": "Loading…", "reset.done": "Token and cache cleared",
+    "ads.loading": "Loading…", "ads.stale": "Not refreshed: {m}. Showing the previous list", "reset.done": "Token and cache cleared",
   },
 };
 
