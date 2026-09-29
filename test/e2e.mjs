@@ -32,10 +32,11 @@ async function boot({ user = "1001", fb, graph } = {}) {
     .map(([name, value]) => ({ name, value, domain: ".facebook.com", path: "/", secure: true })));
   // Registered first, so the graph route below (matched first) wins for graph.facebook.com.
   await ctx.route("https://*.facebook.com/**", (r) => r.fulfill({ contentType: "text/html", body: page$.fb(new URL(r.request().url())) }));
-  await ctx.route("https://graph.facebook.com/**", (r) => {
+  await ctx.route("https://graph.facebook.com/**", async (r) => {
     const u = new URL(r.request().url());
     page$.hits.push(u.pathname.replace(/^\/v[\d.]+\//, "/") + u.search);
     const out = page$.graph(u, page$.hits.length) || {};
+    if (out.delay) await new Promise((res) => setTimeout(res, out.delay));
     const body = out.body ?? out;
     r.fulfill({ status: out.status || 200, contentType: "application/json",
       headers: { "access-control-allow-origin": "*", ...(out.headers || {}) }, body: JSON.stringify(body) });
@@ -112,6 +113,14 @@ async function tokenFlows() {
   ok("EAAH card names the type", has(await text(pop, "#kindCard"), "EAAH"));
   tok = "EAAB<img src=x>" + "z".repeat(70); await ads.reload(); await pop.click("#grabToken");
   ok("spoofed token shape from the page is rejected", (await boxWait(pop, GONE)) && !has(await text(pop, "#tokenBox"), "<img"), await text(pop, "#tokenBox"));
+  // refresh button: reads the CURRENT token from the tab, writes nothing to the clipboard
+  tok = TOK2; await ads.reload(); await captureClipboard(pop);
+  const rt = await clickToast(pop, "#refreshToken");
+  ok("refresh: picks up the token now on the tab", (await boxWait(pop, /^EAABy/)) && has(rt, "Token refreshed"), `${await text(pop, "#tokenBox")} / ${rt}`);
+  ok("refresh: nothing copied to the clipboard", (await clip(pop)).length === 0);
+  tok = null; await ads.reload();
+  const rt2 = await clickToast(pop, "#refreshToken");
+  ok("refresh with no token on any tab: says why, field emptied", (await boxWait(pop, GONE)) && rt2.length > 0 && !has(rt2, "refreshed"), rt2);
   await ads.close(); await pop.reload();
   ok("no ads tab -> field shows a reason", await boxWait(pop, GONE), await text(pop, "#tokenBox"));
   ok("no ads tab -> nothing stored", !(await stored(pop, "token")));
@@ -342,9 +351,132 @@ async function exportFlows() {
   await b.ctx.close();
 }
 
-// dead token + a cached "owner ok": still not exported; "reset token" is the way to try the same token again
+// ---------- Accounts tab: automatic first load ----------
+async function autoFlows() {
+  console.log("\n# accounts: automatic load");
+  const rowsPage = { body: accountsJson };
+  const hitsOf = (b) => b.hits.filter((h) => h.startsWith("/me/adaccounts")).length;
+  const toastOf = (p) => p.evaluate(() => document.querySelector("#toast").textContent.trim());
+
+  // 1. first visit loads by itself; later visits in the same popup do not
+  let b = await boot({ fb: adsFb(TOK), graph: () => rowsPage });
+  await adsPage(b);
+  let pop = await popup(b);
+  ok("token tab open: nothing requested yet", hitsOf(b) === 0);
+  await pop.click('[data-tab="accounts"]');
+  ok("first visit: rows appear without pressing refresh", await rowsAre(pop, ".acc", 1));
+  ok("…with exactly one request", hitsOf(b) === 1, String(hitsOf(b)));
+  ok("…and no toast for an automatic load", (await toastOf(pop)) === "", await toastOf(pop));
+  await pop.click('[data-tab="token"]'); await pop.click('[data-tab="accounts"]'); await pop.waitForTimeout(700);
+  ok("second visit in the same popup: no new request", hitsOf(b) === 1, String(hitsOf(b)));
+
+  // 2. reopening: the popup remembers the Accounts tab; the one-minute slot still holds -> silent, cache shown
+  pop = await popup(b); await pop.waitForTimeout(700);
+  ok("reopen within a minute: no request, cache shown, no complaint", hitsOf(b) === 1 && (await rowsAre(pop, ".acc", 1)) && !has(await toastOf(pop), "Refresh available"), `${hitsOf(b)} ${await toastOf(pop)}`);
+  // 3. a minute later a reopened popup refreshes once
+  await resetLocks(pop);
+  pop = await popup(b);
+  for (let i = 0; i < 40 && hitsOf(b) < 2; i++) await pop.waitForTimeout(100);   // the cached rows are shown at once; the request follows
+  await pop.waitForTimeout(500);
+  ok("reopen after the slot expired: one automatic refresh", hitsOf(b) === 2, String(hitsOf(b)));
+  await b.ctx.close();
+
+  // 4. no token anywhere: nothing sent, the empty state says what to do
+  b = await boot({ fb: () => "<p>feed</p>", graph: () => rowsPage });
+  await (await b.ctx.newPage()).goto("https://www.facebook.com/");
+  pop = await popup(b, "accounts"); await pop.waitForTimeout(700);
+  ok("no token: no request", hitsOf(b) === 0);
+  ok("…the list tells you which button to press (not just a symbol)", has(await text(pop, "#accountsList"), "press the refresh button above"), await text(pop, "#accountsList"));
+  ok("…and shows no error toast", (await toastOf(pop)) === "", await toastOf(pop));
+  await b.ctx.close();
+
+  // 5. API pause: not even tried
+  b = await boot({ fb: adsFb(TOK), graph: () => rowsPage });
+  await adsPage(b);
+  pop = await popup(b);
+  await pop.evaluate(() => chrome.storage.session.set({ cooldownUntil: Date.now() + 10 * 60000 }));
+  await pop.reload(); await pop.waitForTimeout(500);
+  await pop.click('[data-tab="accounts"]'); await pop.waitForTimeout(800);
+  ok("API pause: no automatic request", hitsOf(b) === 0, String(hitsOf(b)));
+  await b.ctx.close();
+
+  // 6. failure: reported once, not retried on the next visit
+  b = await boot({ fb: adsFb(TOK), graph: () => ({ status: 500, body: { error: { code: 1, message: "boom" } } }) });
+  await adsPage(b);
+  pop = await popup(b);
+  await pop.click('[data-tab="accounts"]');
+  ok("automatic load fails: the error is shown", await until(pop, () => /boom/.test(document.querySelector("#toast").textContent)), await toastOf(pop));
+  await pop.click('[data-tab="token"]'); await resetLocks(pop); await pop.click('[data-tab="accounts"]'); await pop.waitForTimeout(700);
+  ok("…and not retried by going back to the tab", hitsOf(b) === 1, String(hitsOf(b)));
+  await b.ctx.close();
+
+  // 7. dead session: the automatic load is skipped after the first 190
+  b = await boot({ fb: adsFb(TOK), graph: () => ({ status: 400, body: { error: { code: 190, error_subcode: 463, message: "expired" } } }) });
+  await adsPage(b);
+  pop = await popup(b);
+  await pop.click('[data-tab="accounts"]'); await until(pop, () => /no longer valid/.test(document.querySelector("#toast").textContent));
+  await resetLocks(pop);
+  pop = await popup(b); await pop.waitForTimeout(800);
+  ok("dead token: reopening does not send anything", hitsOf(b) === 1, String(hitsOf(b)));
+  await b.ctx.close();
+
+  // 8. a slow load shows "Loading" instead of "not loaded"
+  b = await boot({ fb: adsFb(TOK), graph: () => ({ delay: 1200, body: accountsJson }) });
+  await adsPage(b);
+  pop = await popup(b);
+  await pop.click('[data-tab="accounts"]');
+  ok("while loading the list says so", await until(pop, () => /Loading ad accounts/.test(document.querySelector("#accountsList").textContent)), await text(pop, "#accountsList"));
+  await pop.click("#loadAccounts", { force: true }).catch(() => {});   // the button is disabled while loading: even a forced click must do nothing
+  await pop.waitForTimeout(300);
+  ok("a click during the automatic load neither errors nor doubles the request", !has(await toastOf(pop), "Refresh available") && hitsOf(b) === 1, `${await toastOf(pop)} / ${hitsOf(b)}`);
+  ok("…then shows the rows", await rowsAre(pop, ".acc", 1));
+  await b.ctx.close();
+}
+
+// ---------- "All time" spend ----------
+async function allTimeFlows() {
+  console.log("\n# accounts: all-time spend");
+  const ins = (s) => ({ data: [{ spend: s, impressions: "10", inline_link_clicks: "2", date_start: "2026-09-01", date_stop: "2026-09-29" }] });
+  const acc = (id, name, spent, today, month) => ({ account_id: id, name, account_status: 1, currency: "USD", timezone_name: "UTC", amount_spent: spent,
+    ...(today ? { p_today: ins(today) } : {}), ...(month ? { p_month: ins(month) } : {}) });
+  const b = await boot({ fb: adsFb(TOK), graph: () => ({ body: { data: [
+    acc("1", "New", "0", "3.00", null),          // Meta's total has not caught up: $3 spent today
+    acc("2", "Old", "10000", "3.00", "20.00"),   // Meta's total ($100.00) is the bigger one
+    acc("3", "Reset", "500", "3.00", "50.00"),   // total was reset below the last 30 days
+  ] } }) });
+  await adsPage(b);
+  const pop = await popup(b, "accounts");
+  await rowsAre(pop, ".acc", 3);
+  const spends = () => pop.$$eval(".acc", (rows) => Object.fromEntries(rows.map((r) => [r.querySelector(".acc-name").textContent, r.querySelector(".acc-spend").textContent.trim()])));
+  const today = await spends();
+  ok("Today: unchanged", today.New === "$3.00" && today.Old === "$3.00" && today.Reset === "$3.00", JSON.stringify(today));
+  await pop.click('.seg-btn:has-text("All time")');
+  const all = await spends();
+  ok("All time, Meta total lagging at 0 -> shows today's $3.00 (was $0.00)", all.New === "$3.00", JSON.stringify(all));
+  ok("All time, Meta total bigger -> kept", all.Old === "$100.00", JSON.stringify(all));
+  ok("All time, total reset below 30 days + today -> $53.00", all.Reset === "$53.00", JSON.stringify(all));
+  ok("All time total is the sum", has(await text(pop, ".total-value"), "$156.00"), await text(pop, ".total-value"));
+  const totalOf = async (name) => {
+    await pop.click(`.acc:has(.acc-name:text-is("${name}")) .acc-title`);
+    return pop.evaluate((n) => [...document.querySelectorAll(".acc")].find((r) => r.querySelector(".acc-name").textContent === n).querySelector(".kv dd").textContent.trim(), name);
+  };
+  ok("'Total spent' inside the row matches All time (lagging total)", (await totalOf("New")) === "$3.00", await totalOf("New"));
+  ok("'Total spent' inside the row matches All time (reset total)", (await totalOf("Reset")) === "$53.00", await totalOf("Reset"));
+  // a day later the cached "today" is stale ("—"), but All time must not jump back to Meta's lagging 0
+  await pop.evaluate(() => chrome.storage.session.get("fetchedAt").then((o) => chrome.storage.session.set({ fetchedAt: o.fetchedAt - 2 * 86400000 })));
+  const later = await popup(b, "accounts"); await rowsAre(later, ".acc", 3);
+  await later.click('.seg-btn:has-text("All time")');
+  const stable = await later.$$eval(".acc", (rows) => Object.fromEntries(rows.map((r) => [r.querySelector(".acc-name").textContent, r.querySelector(".acc-spend").textContent.trim()])));
+  ok("All time is stable when the cached day is stale", stable.New === "$3.00" && stable.Reset === "$53.00", JSON.stringify(stable));
+  await later.click('.seg-btn:has-text("Today")');
+  const todayStale = await later.$$eval(".acc-spend", (n) => n.map((x) => x.textContent.trim()).join());
+  ok("…while Today honestly shows unknown", !/\$/.test(todayStale), todayStale);
+  await b.ctx.close();
+}
+
+// dead token + a cached "owner ok": still not exported; the refresh button is the way to try the same token again
 async function deadExportFlows() {
-  console.log("\n# dead token: export and reset");
+  console.log("\n# dead token: export and refresh");
   let dead = false;
   const b = await boot({ fb: adsFb(TOK), graph: (u) => dead && u.pathname.endsWith("/adaccounts") ? { status: 400, body: { error: { code: 190, error_subcode: 463, message: "expired" } } }
     : u.pathname.endsWith("/me") ? { body: { id: "1001" } } : { body: accountsJson } });
@@ -357,18 +489,17 @@ async function deadExportFlows() {
   await pop.click('[data-tab="token"]');
   const t = await clickToast(pop, "#copyEnv");
   ok("token now dead: export refused although the owner check is cached", (await clip(pop)).length === 1 && has(t, "no longer valid"), `${(await clip(pop)).length} ${t}`);
-  await pop.click("#clearSession");
-  ok("reset removes the dead record (it holds the token)", await until(pop, () => chrome.storage.session.get("dead").then((o) => !o.dead)));
+  const rt = await clickToast(pop, "#refreshToken");
+  ok("refresh of the same dead token says so and clears the record (it holds the token)", has(rt, "dead-session mark is cleared") && await until(pop, () => chrome.storage.session.get("dead").then((o) => !o.dead)), rt);
   dead = false; await resetLocks(pop);
-  await pop.click("#grabToken"); await boxWait(pop, /^EAAB/);
   const before = b.hits.length;
   await pop.click('[data-tab="accounts"]'); const ok2 = await loadAccounts(pop, 1);
-  ok("after reset the same token is tried again", ok2 && b.hits.length > before, `${b.hits.length} vs ${before}`);
+  ok("after refresh the same token is tried again", ok2 && b.hits.length > before, `${b.hits.length} vs ${before}`);
   await b.ctx.close();
 }
 
 const only = process.argv[2];
-const flows = { token: tokenFlows, fallback: fallbackFlows, version: versionFlows, cache: cacheFlows, session: sessionFlows, ads: adsFlows, export: exportFlows, deadexport: deadExportFlows };
+const flows = { token: tokenFlows, fallback: fallbackFlows, version: versionFlows, cache: cacheFlows, session: sessionFlows, ads: adsFlows, export: exportFlows, deadexport: deadExportFlows, auto: autoFlows, alltime: allTimeFlows };
 try {
   for (const [name, fn] of Object.entries(flows)) if (!only || only === name) await fn();
 } catch (e) { console.error("CRASH", e); fails++; }

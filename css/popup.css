@@ -50,7 +50,6 @@ body {
 }
 .i-copy     { --icon: url(../images/icons/copy.svg); }
 .i-check    { --icon: url(../images/icons/search-check.svg); }
-.i-trash    { --icon: url(../images/icons/trash.svg); }
 .i-external { --icon: url(../images/icons/external-link.svg); }
 .i-refresh  { --icon: url(../images/icons/refresh.svg); }
 .i-search   { --icon: url(../images/icons/search.svg); }
@@ -182,7 +181,7 @@ main { padding-bottom: 0; }
    same distance from the left and right edges. */
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-1-5); min-width: 0; }
 .split .btn { justify-content: center; }
-/* Token field + "Check" + trash on top; the copy buttons under them span all three columns. */
+/* Token field + "Check" + refresh on top; the copy buttons under them span all three columns. */
 .token-grid {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center;
   gap: var(--spacing-3) var(--spacing-1); min-width: 0;

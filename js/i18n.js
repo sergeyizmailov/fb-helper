@@ -11,7 +11,7 @@ const D = {
     "lang.title": "Язык интерфейса",
     "tab.token": "Токен", "tab.cookies": "Cookie", "tab.accounts": "Кабинеты",
     "check": "Проверить", "check.title": "Профиль, приложение и права токена", "check.aria": "Проверить токен",
-    "clear.title": "Сбросить токен и кэш кабинетов",
+    "token.refresh": "Прочитать токен из вкладки FB заново", "token.refreshed": "Токен обновлён", "token.retry": "Токен тот же — отметку «сессия закрыта» снял, следующий запрос попробует его ещё раз",
     "copyToken": "Скопировать токен", "copyEnv": "Токен + cookie",
     "guide.title": "Типы токенов", "guide.open": "Открыть — токен этого типа будет на той вкладке",
     "guide.EAAB": "— основной для рекламы: запуск и правка.",
@@ -36,7 +36,7 @@ const D = {
     "surface.billing": "Биллинг", "surface.bm": "Настройки БМ",
 
     "period.today": "Сегодня", "period.yesterday": "Вчера", "period.week": "7 дней", "period.month": "30 дней", "period.all": "Всё время",
-    "period.noToday": "Без сегодняшнего дня",
+    "period.noToday": "Без сегодняшнего дня", "period.allNote": "Большее из двух: итог Meta или 30 дней + сегодня",
 
     "status.1": "Активен", "status.2": "Заблокирован", "status.3": "Не оплачен", "status.7": "Проверка риска",
     "status.8": "Ожидает оплаты", "status.9": "Льготный период", "status.100": "Закрывается", "status.101": "Закрыт",
@@ -84,7 +84,7 @@ const D = {
     "acc.found": "найдено {n} из {all}", "acc.count": ["кабинет", "кабинета", "кабинетов"], "acc.notAll": " (не все)",
     "acc.updated": "обновлено {t}", "acc.spend": "Спенд", "acc.refreshDash": "— обнови",
     "acc.notAllTitle": "По части кабинетов нет данных за период — обнови список", "acc.notAllShort": "не по всем",
-    "acc.empty": "Кабинеты не загружены", "acc.noMatch": "Ничего не найдено", "acc.noName": "Без имени",
+    "acc.empty": "Кабинеты не загружены — нажми кнопку обновления сверху", "acc.loading": "Загрузка кабинетов…", "acc.noMatch": "Ничего не найдено", "acc.noName": "Без имени",
     "acc.copyId": "Копировать ID", "acc.idCopied": "ID скопирован", "acc.openAds": "Открыть в Ads Manager",
     "acc.noPeriod": "Нет данных за этот период — обнови список",
     "acc.inBm": "Кабинет в БМ {n} · {id}", "acc.bm": "БМ {n}",
@@ -97,13 +97,13 @@ const D = {
     "ads.btn": "Объявления", "ads.collapse": "Свернуть объявления", "ads.refresh": "Обновить объявления", "ads.none": "Объявлений нет",
     "ads.count": ["объявление", "объявления", "объявлений"], "ads.live": " · {n} активно", "ads.rejected": " · {n} отклонено",
     "ads.more": "Показано {n}, есть ещё — остальное в Ads Manager", "ads.wait": "Объявления этого кабинета можно запросить раз в 30 с",
-    "ads.loading": "Загрузка…", "ads.stale": "Не обновилось: {m}. Показан прошлый список", "reset.done": "Токен и кэш удалены",
+    "ads.loading": "Загрузка…", "ads.stale": "Не обновилось: {m}. Показан прошлый список",
   },
   en: {
     "lang.title": "Interface language",
     "tab.token": "Token", "tab.cookies": "Cookies", "tab.accounts": "Ad accounts",
     "check": "Check", "check.title": "Profile, app and permissions of the token", "check.aria": "Check token",
-    "clear.title": "Reset token and account cache",
+    "token.refresh": "Re-read the token from the FB tab", "token.refreshed": "Token refreshed", "token.retry": "Same token — the dead-session mark is cleared, the next request will try it again",
     "copyToken": "Copy token", "copyEnv": "Token + cookies",
     "guide.title": "Token types", "guide.open": "Open — that tab will hold a token of this type",
     "guide.EAAB": "— the main ads token: launch and edit.",
@@ -128,7 +128,7 @@ const D = {
     "surface.billing": "Billing", "surface.bm": "Business settings",
 
     "period.today": "Today", "period.yesterday": "Yesterday", "period.week": "7 days", "period.month": "30 days", "period.all": "All time",
-    "period.noToday": "Excludes today",
+    "period.noToday": "Excludes today", "period.allNote": "The larger of Meta's total and last 30 days + today",
 
     "status.1": "Active", "status.2": "Disabled", "status.3": "Unsettled", "status.7": "Pending risk review",
     "status.8": "Pending settlement", "status.9": "In grace period", "status.100": "Pending closure", "status.101": "Closed",
@@ -176,7 +176,7 @@ const D = {
     "acc.found": "{n} of {all} found", "acc.count": ["ad account", "ad accounts"], "acc.notAll": " (not all)",
     "acc.updated": "updated {t}", "acc.spend": "Spend", "acc.refreshDash": "— refresh",
     "acc.notAllTitle": "Some accounts have no data for this period — refresh the list", "acc.notAllShort": "not all",
-    "acc.empty": "Ad accounts not loaded", "acc.noMatch": "Nothing found", "acc.noName": "Unnamed",
+    "acc.empty": "Ad accounts not loaded — press the refresh button above", "acc.loading": "Loading ad accounts…", "acc.noMatch": "Nothing found", "acc.noName": "Unnamed",
     "acc.copyId": "Copy ID", "acc.idCopied": "ID copied", "acc.openAds": "Open in Ads Manager",
     "acc.noPeriod": "No data for this period — refresh the list",
     "acc.inBm": "Account in business portfolio {n} · {id}", "acc.bm": "{n}",
@@ -189,7 +189,7 @@ const D = {
     "ads.btn": "Ads", "ads.collapse": "Hide ads", "ads.refresh": "Refresh ads", "ads.none": "No ads",
     "ads.count": ["ad", "ads"], "ads.live": " · {n} active", "ads.rejected": " · {n} disapproved",
     "ads.more": "Showing {n}, more exist — the rest is in Ads Manager", "ads.wait": "Ads of one account can be requested once per 30 s",
-    "ads.loading": "Loading…", "ads.stale": "Not refreshed: {m}. Showing the previous list", "reset.done": "Token and cache cleared",
+    "ads.loading": "Loading…", "ads.stale": "Not refreshed: {m}. Showing the previous list",
   },
 };
 

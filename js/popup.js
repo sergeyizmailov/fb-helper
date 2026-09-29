@@ -1,5 +1,5 @@
 // FB Helper — read-only helper: EAAB token, session cookies, ad account status.
-// Nothing leaves the browser except GET calls to graph.facebook.com made on an explicit click.
+// Nothing leaves the browser except GET calls to graph.facebook.com: on a click, or once when the Accounts tab is first opened.
 // Reading the token from the FB tab is local.
 // Token and account cache live in chrome.storage.session (gone when the browser closes). The account cache
 // belongs to the FB user (c_user), not to a token string: FB pages hand out different tokens, and switching
@@ -7,7 +7,7 @@
 // storage.local holds only a newer Graph API version learned from Graph itself.
 
 import { t, tn, has, locale, getLang, setLang, loadLang, applyStatic } from "./i18n.js";
-import { isSessionError, sessionLabel, verNum, latestVersion, AD_PROBLEMS, adRank, reviewLines, ownerVerdict } from "./pure.js";
+import { isSessionError, sessionLabel, verNum, latestVersion, AD_PROBLEMS, adRank, reviewLines, ownerVerdict, lifetimeSpend, spendFloor } from "./pure.js";
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -78,7 +78,7 @@ const OPTIONAL_FIELDS = {
     .map((x) => { const [preset, alias] = x.split(":"); return `insights.date_preset(${preset}).as(${alias}){spend,impressions,inline_link_clicks}`; })
     .join(","),
 };
-// Spend periods. Meta's last_7d / last_30d end yesterday (today excluded). "all" = lifetime amount_spent.
+// Spend periods. Meta's last_7d / last_30d end yesterday (today excluded). "all" = Meta's amount_spent, raised to 30 days + today if that is more.
 const PERIODS = [
   { key: "today", label: "period.today", alias: "p_today" },
   { key: "yesterday", label: "period.yesterday", alias: "p_yesterday" },
@@ -96,15 +96,15 @@ const AD_STATUS = {
 
 const state = {
   token: null, apiVersion: API_VERSION, accounts: [], fetchedAt: 0, truncated: false, owner: null,
-  filter: "", statusFilter: null, cooldownUntil: 0, usage: null, cookies: [],
+  filter: "", statusFilter: null, cooldownUntil: 0, usage: null, cookies: [], accLoading: false,
   // A token Graph reported as dead ({ token, code }): no request is sent with it again. Cleared by any other token
-  // or by "reset token" (the deliberate way to try the same token once more). Persisted in storage.session.
+  // or by the ⟳ button (the deliberate way to try the same token once more). Persisted in storage.session.
   dead: null,
   checked: null,                                     // last token↔c_user answer: { token, user, verdict, meId }
-  // Rate locks survive popup reopen and "reset token" (storage.session), unlike the data cache.
+  // Rate locks survive popup reopen (storage.session), unlike the data cache.
   locks: { accountsAt: 0, ads: {} },
   open: new Set(), ads: {}, adsBusy: new Set(), adsHidden: new Set(),
-  // Generation: bumped on token change / reset. Every request captures it;
+  // Generation: bumped on token change. Every request captures it;
   // a response from an older generation is dropped (Stale) and in-flight fetches are aborted.
   gen: 0, ctl: new AbortController(), skip: new Set(),
   grabOp: 0,                                         // latest token grab wins; older ones are dropped
@@ -224,7 +224,7 @@ function claimSlot(key) {
   });
 }
 
-// Token changed or reset: cancel in-flight requests (their answers are dropped as Stale).
+// Token changed: cancel in-flight requests (their answers are dropped as Stale).
 // The account cache stays; rate locks and the throttle pause are kept on purpose.
 function newGeneration() {
   state.gen++;
@@ -234,8 +234,7 @@ function newGeneration() {
   state.adsBusy = new Set();
   $("#tokenInfo").classList.add("hidden");
 }
-// Accounts, ads and which rows are open: kept across popup reopen and token changes, dropped on reset
-// or when the FB user changes.
+// Accounts, ads and which rows are open: kept across popup reopen and token changes, dropped when the FB user changes.
 const CACHE_KEYS = ["accounts", "fetchedAt", "truncated", "owner", "ads", "view"];
 function dropCache() {
   Object.assign(state, { accounts: [], fetchedAt: 0, truncated: false, owner: null, open: new Set(), ads: {}, adsHidden: new Set() });
@@ -412,7 +411,7 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
   const none = async (msg) => {
     if (state.token) {
       newGeneration();                                 // also cancels requests still running on the old token
-      gen = state.gen;                                 // our own bump, not a reset
+      gen = state.gen;                                 // our own bump, not a token change from elsewhere
       Object.assign(state, { token: null, tokenSource: null });
       await chrome.storage.session.remove(["token", "tokenSource"]);
       if (!current()) return null;
@@ -431,7 +430,7 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
     let r = null;
     try { [{ result: r }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world: "MAIN", func: grabInPage }); }
     catch { /* no access to this tab — try the next one */ }
-    if (!current()) return null;                       // reset or a newer grab happened meanwhile
+    if (!current()) return null;                       // a newer grab happened meanwhile
     if (!r) continue;
     read.push(r);
     pick = pickToken(r);
@@ -441,7 +440,7 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
   if (!pick) return none(t("grab.notFound", { where: read.length === 1 ? String(read[0].host || t("grab.thisTab")) : t("grab.openTabs") }));
   if (pick !== state.token) {
     newGeneration();
-    gen = state.gen;                                   // our own bump, not a reset
+    gen = state.gen;                                   // our own bump, not a token change from elsewhere
     state.token = pick;
   }
   if (state.dead && state.dead.token !== pick) clearDead();   // a different token: the dead one no longer matters
@@ -450,7 +449,7 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
   state.token = pick;
   state.tokenSource = { surface: surfaceOf(String(src.host || ""), String(src.path || "")) };
   await saveSession({ token: pick, tokenSource: state.tokenSource });
-  // A reset during the write above removes the key after us; if it ran, don't report success.
+  // A token change during the write above (this window or another) supersedes us; if it happened, don't report success.
   if (!current()) return null;
   renderToken();
   if (toClipboard) {
@@ -626,21 +625,33 @@ function optionalFieldIn(e) {
 }
 // Mark rows fetched without an optional field (spend = unknown, not 0; pixels = unknown, not none)
 // and keep only the display string of the funding source.
+// _floor: what the insights already prove was spent (today + last 30 days), kept for the "All time" figure.
+const spendOfRow = (x) => Number(x?.data?.[0]?.spend);
 const slim = (a) => ({ ...a, _noInsights: state.skip.has("insights") || undefined,
+  _floor: state.skip.has("insights") ? undefined : spendFloor(spendOfRow(a.p_today), spendOfRow(a.p_month)),
   _noPixels: state.skip.has("adspixels") || undefined,
   funding_source_details: a.funding_source_details ? { display_string: a.funding_source_details.display_string } : undefined });
 
-async function fetchAccounts() {
-  if (!state.token && !(await grabToken({ toClipboard: false }))) return;   // no token: grabToken says why
-  if (isDead()) return toast(t("err.session", { c: state.dead.code }), true);   // before the slot: costs nothing
+// auto: started by opening the Accounts tab, not by a click. Same limits as a click, but silent where a click
+// would only complain (no token, dead session, the one-minute slot): the empty list explains itself.
+let accBusy = false;                                    // one list load at a time: a click during an automatic load is a no-op
+async function fetchAccounts(opts) {
+  if (accBusy) return;
+  accBusy = true;
+  try { await loadAccountsNow(opts); } finally { accBusy = false; }
+}
+async function loadAccountsNow({ auto = false } = {}) {
+  if (!state.token && !(await grabToken({ toClipboard: false, silent: auto }))) return;   // no token: grabToken says why
+  if (isDead()) return auto ? undefined : toast(t("err.session", { c: state.dead.code }), true);   // before the slot: costs nothing
   const gen = state.gen;                              // fixed before waiting for the lock
   let wait;
   try { wait = await claimSlot("accounts"); }        // before sending: a failed attempt counts too
-  catch (e) { return toast(t("err.slot", { m: e.message }), true); }
-  if (gen !== state.gen) return;                      // reset / new token while waiting
-  if (wait > 0) return toast(t("acc.wait", { n: Math.ceil(wait / 1000) }), true);
+  catch (e) { return auto ? undefined : toast(t("err.slot", { m: e.message }), true); }
+  if (gen !== state.gen) return;                      // new token while waiting
+  if (wait > 0) return auto ? undefined : toast(t("acc.wait", { n: Math.ceil(wait / 1000) }), true);
   const btn = $("#loadAccounts");
   btn.disabled = true; btn.setAttribute("aria-busy", "true");
+  state.accLoading = true; renderAccounts();
   try {
     const rows = [];
     let after = null, pages = 0;
@@ -667,20 +678,38 @@ async function fetchAccounts() {
     Object.assign(state, { accounts: rows, fetchedAt: Date.now(), truncated: !!after, owner });
     await saveSession({ accounts: rows, fetchedAt: state.fetchedAt, truncated: state.truncated, owner, ads: adsToSave() });
     saveView();
-    toast(t("acc.loaded", { n: rows.length }) + (after ? t("acc.truncated") : ""));
+    if (!auto || after) toast(t("acc.loaded", { n: rows.length }) + (after ? t("acc.truncated") : ""));   // the list itself is the answer to an automatic load
   } catch (e) {
     if (!(e instanceof Stale)) toast(e.message, true);
   } finally {
+    state.accLoading = false;
     btn.disabled = false; btn.removeAttribute("aria-busy");
     renderAccounts();
   }
+}
+// First time the Accounts tab is shown after the popup was opened: load the list by itself, so nobody has to
+// guess that the refresh button exists. Once per popup open, however it ends (not on every visit to the tab).
+// The limits are a click's: the one-minute slot shared by all windows, the API pause, a dead session.
+let autoTried = false, tokenReadyDone;
+const tokenReady = new Promise((resolve) => { tokenReadyDone = resolve; });   // the silent token read on open has finished
+async function autoLoadAccounts() {
+  if (autoTried) return;
+  autoTried = true;
+  // Without the silent token read the request could go out with a stale token. Not forever, though:
+  // a frozen FB tab or a failed start must not leave the tab without its list.
+  await Promise.race([tokenReady, new Promise((resolve) => setTimeout(resolve, 15000))]);
+  if (!state.token || isDead() || state.cooldownUntil > Date.now()) return;
+  return fetchAccounts({ auto: true });
 }
 // Spend for the selected period. null = unknown (field unavailable, or the cache is from an earlier day
 // in that account's timezone); a missing row = no delivery = 0.
 // FIELD 2026-09-27: Graph omits a nested insights key entirely when there is no delivery in the
 // period (not `data: []`), so a missing key on a row fetched WITH the field is a real 0.
 function statsOf(a, key = state.period) {
-  if (key === "all") return { spend: major(a.amount_spent || 0, a.currency), imp: null, clicks: null };
+  if (key === "all") {
+    // Meta's total, but never below what the last 30 days + today showed when the list was fetched (see lifetimeSpend).
+    return { spend: lifetimeSpend(major(a.amount_spent || 0, a.currency), a._floor), imp: null, clicks: null };
+  }
   if (!state.fetchedAt || a._noInsights) return null;
   if (dayIn(a.timezone_name, state.fetchedAt) !== dayIn(a.timezone_name, Date.now())) return null;
   const r = a[PERIODS.find((p) => p.key === key).alias]?.data?.[0];
@@ -772,7 +801,7 @@ function keepFocus(render) {
 function renderPeriods() {
   keepFocus(() => fill($("#periodSeg"), ...PERIODS.map((p) => el("button", {
     class: `seg-btn${p.key === state.period ? " active" : ""}`, "aria-pressed": String(p.key === state.period), "data-focus": `period:${p.key}`,
-    title: p.key === "week" || p.key === "month" ? t("period.noToday") : null,
+    title: p.key === "week" || p.key === "month" ? t("period.noToday") : p.key === "all" ? t("period.allNote") : null,
     onclick: () => { state.period = p.key; try { localStorage.setItem("period", p.key); } catch { /* */ } renderPeriods(); renderAccounts(); },
   }, t(p.label)))));
 }
@@ -793,7 +822,7 @@ function drawAccounts() {
       onclick: () => { state.statusFilter = on ? null : label; renderAccounts(); } }, `${label} ${n}`);
   }));
   const rows = visibleRows();
-  if (!state.accounts.length) return fill(list, el("div", { class: "empty" }, t("acc.empty")));
+  if (!state.accounts.length) return fill(list, el("div", { class: "empty" }, state.accLoading ? t("acc.loading") : t("acc.empty")));
   if (!rows.length) return fill(list, el("div", { class: "empty" }, t("acc.noMatch")));
   // Stats once per row: the sort comparator would otherwise recompute them O(n log n) times.
   const stats = new Map(rows.map((a) => [a, statsOf(a)]));
@@ -849,7 +878,7 @@ function renderAccount(a, st) {
   const pixels = a.adspixels?.data;
   const body = el("div", { class: "acc-body" },
     el("dl", { class: "kv" },
-      el("dt", {}, t("acc.spent")), el("dd", {}, numEl(money(a.amount_spent, cur))),
+      el("dt", {}, t("acc.spent")), el("dd", {}, numEl(fmt(statsOf(a, "all").spend, cur))),   // same number as the "All time" period
       el("dt", {}, t("acc.balance")), el("dd", {}, numEl(money(a.balance, cur))),
       el("dt", {}, t("acc.threshold")), el("dd", {}, threshold !== undefined ? numEl(money(threshold, cur)) : "—"),
       el("dt", {}, t("acc.daily")), el("dd", {}, dsl === undefined ? "—" : Number(dsl) < 0 ? t("acc.noLimit") : numEl(fmt(Number(dsl), cur))),
@@ -934,7 +963,7 @@ async function loadAds(id) {
   let wait;
   try { wait = await claimSlot(id); }
   catch (e) { busy.delete(id); syncAdsButtons(); return toast(t("err.slot", { m: e.message }), true); }
-  if (gen !== state.gen) { busy.delete(id); return; } // reset / new token while waiting: old account list
+  if (gen !== state.gen) { busy.delete(id); return; } // new token while waiting: old account list
   if (wait > 0) {
     busy.delete(id); syncAdsButtons();
     return toast(t("ads.wait"), true);
@@ -975,17 +1004,19 @@ async function loadAds(id) {
   renderAccounts();
 }
 
-async function clearSession() {
-  // Cancel first (synchronously): in-flight grabs and requests must not write the token back.
-  newGeneration();
-  state.grabOp++;
-  Object.assign(state, { token: null, tokenSource: null, usage: null, filter: "", statusFilter: null, dead: null, checked: null });
-  // Rate locks and the throttle pause stay: a reset must not become a way around them.
-  // The dead-token record goes: it holds the token itself, and a reset is the user's call to try again.
-  await Promise.all([dropCache(), chrome.storage.session.remove(["token", "tokenSource", "usage", "dead"])]);
-  $("#accountFilter").value = "";
-  renderToken(); renderAccounts(); renderUsage();
-  toast(t("reset.done"));
+// The ⟳ next to the token: read it again from the open FB tabs (no clipboard, no request to Graph).
+// It is also the deliberate way to try a token Graph called dead: the mark is cleared first, so the next
+// request with it goes out once. The account cache stays; rate locks and the throttle pause are not touched.
+async function refreshToken() {
+  const btn = $("#refreshToken");
+  btn.disabled = true; btn.setAttribute("aria-busy", "true");
+  const was = state.token, wasDead = isDead();
+  if (state.dead) clearDead();
+  state.checked = null;                                 // the owner is verified again on the next export
+  try {
+    const got = await grabToken({ toClipboard: false });   // no token: grabToken toasts why
+    if (got) toast(wasDead && got === was ? t("token.retry") : t("token.refreshed"));
+  } finally { btn.disabled = false; btn.removeAttribute("aria-busy"); }
 }
 
 // ---------- wiring ----------
@@ -996,6 +1027,7 @@ function switchTab(name) {
   });
   $$(".panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${name}`));
   try { localStorage.setItem("tab", name); } catch { /* */ }
+  if (name === "accounts") autoLoadAccounts();
 }
 
 // RU · EN in the header. Everything is redrawn from state; the token field is re-read from the FB tab (local),
@@ -1033,22 +1065,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#copyEnv").addEventListener("click", copyEnv);
   $("#copyCookies").addEventListener("click", () => copyCookies(false));
   $("#copyCookieJson").addEventListener("click", () => copyCookies(true));
-  $("#loadAccounts").addEventListener("click", fetchAccounts);
+  $("#loadAccounts").addEventListener("click", () => fetchAccounts());
   $("#copyLiveIds").addEventListener("click", copyLiveIds);
   $("#accountFilter").addEventListener("input", (e) => { state.filter = e.target.value; renderAccounts(); });
-  $("#clearSession").addEventListener("click", clearSession);
+  $("#refreshToken").addEventListener("click", refreshToken);
 
   await checkOwner();                                   // cache from another FB login: don't show it
   renderToken(); renderAccounts(); renderUsage();
   readCookies();
   // Show the token right away: read it from the open FB tab (local page read, no network request).
-  grabToken({ toClipboard: false, silent: true });
+  grabToken({ toClipboard: false, silent: true }).catch(console.error).finally(tokenReadyDone);
   chrome.storage.session.onChanged?.addListener((ch) => {
     if (ch.cooldownUntil) { state.cooldownUntil = ch.cooldownUntil.newValue || 0; renderUsage(); }
     if (ch.locks) { state.locks = ch.locks.newValue || { accountsAt: 0, ads: {} }; syncAdsButtons(); }
     // Another window found the token dead (or a new token replaced it): follow.
     if (ch.dead && (ch.dead.newValue?.token || null) !== (state.dead?.token || null)) { state.dead = ch.dead.newValue || null; renderToken(); }
-    // Token reset or replaced in another window of this extension: drop ours too.
+    // Token dropped or replaced in another window of this extension: drop ours too.
     if (ch.token && (ch.token.newValue || null) !== state.token) {
       newGeneration(); state.grabOp++;
       state.token = ch.token.newValue || null;

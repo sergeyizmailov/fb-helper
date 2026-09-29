@@ -1,7 +1,7 @@
 // Unit tests for js/pure.js — plain Node, no browser: `node --test test/*.test.mjs`
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isSessionError, sessionLabel, verNum, latestVersion, adRank, reviewLines, ownerVerdict } from "../js/pure.js";
+import { isSessionError, sessionLabel, verNum, latestVersion, adRank, reviewLines, ownerVerdict, lifetimeSpend, spendFloor } from "../js/pure.js";
 
 test("session errors: 190 and subcodes 459/460/463/467", () => {
   for (const [c, s] of [[190, undefined], [190, 463], [190, 467], [1, 459], [1, 460], [459, undefined], [467, undefined]])
@@ -76,4 +76,16 @@ test("ownerVerdict: mismatch only for first-party tokens", () => {
   assert.equal(ownerVerdict(false, "122190171494905792", "1001"), "unknown", "app-scoped id of a custom app");
   assert.equal(ownerVerdict(true, null, "1001"), "unknown");
   assert.equal(ownerVerdict(true, "1001", null), "unknown");
+});
+
+test("lifetimeSpend: amount_spent that lags is lifted to the proven floor, never lowered", () => {
+  assert.equal(spendFloor(3, 0), 3);
+  assert.equal(spendFloor(3, 20), 23);
+  assert.equal(spendFloor(NaN, undefined), 0, "missing insights rows count as 0");
+  assert.equal(lifetimeSpend(0, spendFloor(3, 0)), 3, "new account: Meta says 0, today already $3");
+  assert.equal(lifetimeSpend(100, spendFloor(3, 20)), 100, "Meta's total is bigger: keep it");
+  assert.equal(lifetimeSpend(5, spendFloor(3, 50)), 53, "total was reset below the last 30 days");
+  assert.equal(lifetimeSpend(5, undefined), 5, "no insights read: Meta's number as is");
+  assert.equal(lifetimeSpend(undefined, undefined), 0);
+  assert.equal(lifetimeSpend("12.5", 1), 12.5);
 });

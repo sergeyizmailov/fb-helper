@@ -21,6 +21,15 @@ export function latestVersion(text, cap = Infinity) {
   return best;
 }
 
+// ---------- spend ----------
+// "All time" of an account. Meta's amount_spent lags behind (a new account can still say 0 while it spent today) and
+// restarts when a spend cap is reset, so it can sit BELOW what the insights already show. The last 30 days (they end
+// yesterday) plus today can never exceed the lifetime total, so the answer is the larger of the two.
+// floor: today + the last 30 days as they were when the list was fetched (spendFloor); still a valid lower bound the
+// next day, so the figure does not jump when the cached "today" goes stale. null/undefined = no insights were read.
+export const spendFloor = (today, last30) => (Number(today) || 0) + (Number(last30) || 0);
+export const lifetimeSpend = (amountSpent, floor) => Math.max(Number(amountSpent) || 0, Number(floor) || 0);
+
 // ---------- ads ----------
 export const AD_PROBLEMS = ["DISAPPROVED", "WITH_ISSUES"];
 // Problem ads first; the rest keep Graph's order (Array.sort is stable).
