@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "FB Helper",
   "version": "2.1.0",
-  "description": "Facebook token, session cookies and ad account status. Data goes only to graph.facebook.com, when you ask for it.",
+  "description": "Facebook token, session cookies and ad account status. Requests go only to graph.facebook.com, with built-in rate limits.",
   "icons": {
     "16": "images/toolbar_16.png",
     "32": "images/toolbar_32.png",

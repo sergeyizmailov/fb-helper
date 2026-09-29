@@ -1,10 +1,10 @@
 // Pure helpers: no DOM, no chrome.*. Split out of popup.js so test/pure.test.mjs can run them in plain Node.
 
-// Graph says "this login / token is dead" (invalid or expired token, checkpoint, password changed).
-// Meta reports them as code 190 with subcode 459 / 460 / 463 / 467; both spots are checked.
-const SESSION_CODES = new Set([459, 460, 463, 467]);
-export function isSessionError(code, subcode) {
-  return Number(code) === 190 || SESSION_CODES.has(Number(code)) || SESSION_CODES.has(Number(subcode));
+// Graph says "this login / token is dead": code 190 (invalid / expired token; subcodes 458–467 say why — checkpoint,
+// password changed, logged out…) or 102 (API session). Subcodes alone are not trusted: they only mean this under 190.
+export function isSessionError(code) {
+  const c = Number(code);
+  return c === 190 || c === 102;
 }
 // "190/463" for messages.
 export const sessionLabel = (code, subcode) => (subcode ? `${code}/${subcode}` : String(code));

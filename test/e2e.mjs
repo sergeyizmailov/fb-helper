@@ -63,7 +63,7 @@ async function popup(b, tab) {
 }
 const text = (p, sel) => p.evaluate((s) => document.querySelector(s)?.textContent.trim() ?? null, sel);
 // Poll from Node, not with waitForFunction: page.evaluate awaits promises (chrome.storage.*) and survives reloads.
-const until = async (p, fn, arg, ms = 4000) => {
+const until = async (p, fn, arg, ms = 8000) => {   // generous: a loaded machine is slow, a real failure still fails
   const end = Date.now() + ms;
   while (Date.now() < end) {
     try { if (await p.evaluate(fn, arg)) return true; } catch { /* page navigating */ }
@@ -74,7 +74,7 @@ const until = async (p, fn, arg, ms = 4000) => {
 const rowsAre = (p, sel, n) => until(p, ([s, k]) => document.querySelectorAll(s).length === k, [sel, n]);
 const resetLocks = (p) => p.evaluate(() => chrome.storage.session.set({ locks: { accountsAt: 0, ads: {} } })).then(() => p.waitForTimeout(200));
 // Click and wait for the toast it produces (cleared first, so an older toast cannot answer).
-async function clickToast(p, sel, ms = 3500) {
+async function clickToast(p, sel, ms = 8000) {
   await p.evaluate(() => { const t = document.querySelector("#toast"); t.textContent = ""; t.classList.remove("show"); });
   await p.click(sel);
   await until(p, () => document.querySelector("#toast").textContent.length > 0, null, ms);
@@ -211,7 +211,7 @@ async function sessionFlows() {
   const fb = await adsPage(b);
   let pop = await popup(b, "accounts");
   await clickToast(pop, "#loadAccounts");
-  ok("dead flag persisted", (await stored(pop, "dead"))?.token === TOK);
+  ok("dead flag persisted", ((await stored(pop, "dead")) || []).some((d) => d.token === TOK));
   await resetLocks(pop);
   const again = await clickToast(pop, "#loadAccounts");
   ok("second click: no request, session message", b.hits.length === 1 && has(again, "no longer valid"), `${b.hits.length} ${again}`);
@@ -225,9 +225,19 @@ async function sessionFlows() {
   b.graph = () => ({ body: accountsJson });
   tok = TOK2; await fb.reload();
   await pop.click('[data-tab="token"]'); await pop.click("#grabToken");
-  ok("different token clears the dead flag", await until(pop, () => chrome.storage.session.get("dead").then((o) => !o.dead)));
+  await boxWait(pop, /^EAABy/);                         // the grab reads the reloading tab: wait for it, don't race it
+  ok("a different token is not dead", await until(pop, (t2) => chrome.storage.session.get("dead").then((o) => !(o.dead || []).some((d) => d.token === t2)), TOK2));
   await pop.click('[data-tab="accounts"]');
-  ok("new token works again", (await loadAccounts(pop, 1)) && b.hits.length === 2, `${b.hits.length}`);
+  const box2 = await text(pop, "#tokenBox");
+  const loaded2 = await loadAccounts(pop, 1);
+  ok("new token works again", loaded2 && b.hits.length === 2, `${b.hits.length} box=${box2.slice(0, 6)} toast=${await text(pop, "#toast")}`);
+  // back to the old dead token (A → B → A): its mark is still there, nothing is sent
+  b.graph = () => dead(190, 463);
+  tok = TOK; await fb.reload();
+  await pop.click('[data-tab="token"]'); await pop.click("#grabToken"); await boxWait(pop, /^EAABx/);
+  await pop.click('[data-tab="accounts"]'); await resetLocks(pop);
+  const back = await clickToast(pop, "#loadAccounts");
+  ok("A → B → A: the first token is still known dead, no request", b.hits.length === 2 && has(back, "no longer valid"), `${b.hits.length} ${back}`);
   ok("no console errors", b.errs.length === 0, b.errs.join(" | "));
   await b.ctx.close();
 
@@ -360,7 +370,7 @@ async function autoFlows() {
 
   // 1. first visit loads by itself; later visits in the same popup do not
   let b = await boot({ fb: adsFb(TOK), graph: () => rowsPage });
-  await adsPage(b);
+  const fbTab = await adsPage(b);
   let pop = await popup(b);
   ok("token tab open: nothing requested yet", hitsOf(b) === 0);
   await pop.click('[data-tab="accounts"]');
@@ -373,12 +383,24 @@ async function autoFlows() {
   // 2. reopening: the popup remembers the Accounts tab; the one-minute slot still holds -> silent, cache shown
   pop = await popup(b); await pop.waitForTimeout(700);
   ok("reopen within a minute: no request, cache shown, no complaint", hitsOf(b) === 1 && (await rowsAre(pop, ".acc", 1)) && !has(await toastOf(pop), "Refresh available"), `${hitsOf(b)} ${await toastOf(pop)}`);
-  // 3. a minute later a reopened popup refreshes once
+  // 3. a minute later, same FB page: reopening the popup still sends nothing (the list is from this page load)
   await resetLocks(pop);
+  pop = await popup(b); await pop.waitForTimeout(1200);
+  ok("reopen after a minute, FB page not reloaded: no request", hitsOf(b) === 1, String(hitsOf(b)));
+  ok("the popup opens at full height on the Accounts tab", await pop.evaluate(() => document.body.classList.contains("tall") && document.body.getBoundingClientRect().height >= 600));
+  // 4. the FB page is reloaded: the next popup open refreshes once, the one after does not
+  await fbTab.reload(); await resetLocks(pop);
   pop = await popup(b);
-  for (let i = 0; i < 40 && hitsOf(b) < 2; i++) await pop.waitForTimeout(100);   // the cached rows are shown at once; the request follows
+  for (let i = 0; i < 40 && hitsOf(b) < 2; i++) await pop.waitForTimeout(100);
   await pop.waitForTimeout(500);
-  ok("reopen after the slot expired: one automatic refresh", hitsOf(b) === 2, String(hitsOf(b)));
+  ok("after an FB page reload: one automatic refresh", hitsOf(b) === 2, String(hitsOf(b)));
+  await resetLocks(pop);
+  pop = await popup(b); await pop.waitForTimeout(1200);
+  ok("…and only one: reopening again sends nothing", hitsOf(b) === 2, String(hitsOf(b)));
+  // 5. the manual refresh still works any time the slot allows
+  await resetLocks(pop);
+  await pop.click("#loadAccounts"); for (let i = 0; i < 30 && hitsOf(b) < 3; i++) await pop.waitForTimeout(100);
+  ok("the refresh button still reloads", hitsOf(b) === 3, String(hitsOf(b)));
   await b.ctx.close();
 
   // 4. no token anywhere: nothing sent, the empty state says what to do
@@ -430,6 +452,22 @@ async function autoFlows() {
   await pop.waitForTimeout(300);
   ok("a click during the automatic load neither errors nor doubles the request", !has(await toastOf(pop), "Refresh available") && hitsOf(b) === 1, `${await toastOf(pop)} / ${hitsOf(b)}`);
   ok("…then shows the rows", await rowsAre(pop, ".acc", 1));
+  await b.ctx.close();
+}
+
+// ---------- a hung FB tab must not hold the popup ----------
+async function hungFlows() {
+  console.log("\n# hung tab");
+  // The hung tab is an Ads Manager tab used most recently, so it is asked first; the token sits on a BM tab.
+  const b = await boot({ fb: (u) => u.pathname.startsWith("/hang")
+    ? "<script>setTimeout(() => { const end = Date.now() + 60000; while (Date.now() < end); }, 300)</script>hung"
+    : u.hostname.startsWith("business") ? `<script>window.__accessToken=${JSON.stringify(TOK)}</script>bm` : "<p>feed</p>" });
+  await (await b.ctx.newPage()).goto("https://business.facebook.com/settings/");
+  const hung = await b.ctx.newPage(); await hung.goto("https://adsmanager.facebook.com/hang"); await hung.waitForTimeout(600);
+  const pop = await popup(b);
+  const t0 = Date.now();
+  const got = await boxWait(pop, /^EAAB/);
+  ok("token from the healthy tab within a few seconds although another FB tab hangs", got && Date.now() - t0 < 6000, `${got} ${Date.now() - t0} ms`);
   await b.ctx.close();
 }
 
@@ -490,7 +528,7 @@ async function deadExportFlows() {
   const t = await clickToast(pop, "#copyEnv");
   ok("token now dead: export refused although the owner check is cached", (await clip(pop)).length === 1 && has(t, "no longer valid"), `${(await clip(pop)).length} ${t}`);
   const rt = await clickToast(pop, "#refreshToken");
-  ok("refresh of the same dead token says so and clears the record (it holds the token)", has(rt, "dead-session mark is cleared") && await until(pop, () => chrome.storage.session.get("dead").then((o) => !o.dead)), rt);
+  ok("refresh of the same dead token says so and clears the record (it holds the token)", has(rt, "dead-session mark is cleared") && await until(pop, () => chrome.storage.session.get("dead").then((o) => !(o.dead || []).length)), rt);
   dead = false; await resetLocks(pop);
   const before = b.hits.length;
   await pop.click('[data-tab="accounts"]'); const ok2 = await loadAccounts(pop, 1);
@@ -499,7 +537,7 @@ async function deadExportFlows() {
 }
 
 const only = process.argv[2];
-const flows = { token: tokenFlows, fallback: fallbackFlows, version: versionFlows, cache: cacheFlows, session: sessionFlows, ads: adsFlows, export: exportFlows, deadexport: deadExportFlows, auto: autoFlows, alltime: allTimeFlows };
+const flows = { token: tokenFlows, fallback: fallbackFlows, version: versionFlows, cache: cacheFlows, session: sessionFlows, ads: adsFlows, export: exportFlows, deadexport: deadExportFlows, auto: autoFlows, alltime: allTimeFlows, hung: hungFlows };
 try {
   for (const [name, fn] of Object.entries(flows)) if (!only || only === name) await fn();
 } catch (e) { console.error("CRASH", e); fails++; }

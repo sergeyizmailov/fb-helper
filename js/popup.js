@@ -1,5 +1,6 @@
 // FB Helper — read-only helper: EAAB token, session cookies, ad account status.
-// Nothing leaves the browser except GET calls to graph.facebook.com: on a click, or once when the Accounts tab is first opened.
+// Nothing leaves the browser except GET calls to graph.facebook.com: on a click, or when the Accounts tab opens with
+// nothing loaded yet / after the FB page was reloaded.
 // Reading the token from the FB tab is local.
 // Token and account cache live in chrome.storage.session (gone when the browser closes). The account cache
 // belongs to the FB user (c_user), not to a token string: FB pages hand out different tokens, and switching
@@ -23,6 +24,8 @@ const MIN_REFRESH_MS = 60 * 1000;            // accounts: one attempt per minute
 const ADS_LOCK_MS = 30 * 1000;               // ads: one read per account per 30 s
 const COOLDOWN_MS = 30 * 60 * 1000;          // throttle → 30 min hands off, no retries
 const TIMEOUT_MS = 20 * 1000;
+const TAB_READ_MS = 2500;                    // a slow FB tab ahead of one that already gave a token is waited this long…
+const TAB_WAIT_MS = 12 * 1000;               // …and this long in all when none has a token yet (busy machine, heavy page)
 const THROTTLE_CODES = new Set([4, 17, 32, 613]);
 const SESSION_COOKIES = ["c_user", "xs", "datr", "fr", "sb"];   // must-haves, listed first
 const GRAPH_URL = "https://graph.facebook.com/";
@@ -97,9 +100,9 @@ const AD_STATUS = {
 const state = {
   token: null, apiVersion: API_VERSION, accounts: [], fetchedAt: 0, truncated: false, owner: null,
   filter: "", statusFilter: null, cooldownUntil: 0, usage: null, cookies: [], accLoading: false,
-  // A token Graph reported as dead ({ token, code }): no request is sent with it again. Cleared by any other token
-  // or by the ⟳ button (the deliberate way to try the same token once more). Persisted in storage.session.
-  dead: null,
+  // Tokens Graph reported as dead ([{ token, code }], newest last, at most 5): no request is sent with them again.
+  // The ⟳ next to the token clears the current one's mark (the deliberate retry). Persisted in storage.session.
+  dead: [],
   checked: null,                                     // last token↔c_user answer: { token, user, verdict, meId }
   // Rate locks survive popup reopen (storage.session), unlike the data cache.
   locks: { accountsAt: 0, ads: {} },
@@ -186,7 +189,7 @@ async function loadState() {
   const ses = await chrome.storage.session.get(["token", "tokenSource", "dead", ...CACHE_KEYS, "cooldownUntil", "usage", "locks"]);
   try { const { apiVersion } = await chrome.storage.local.get("apiVersion"); adoptVersion(apiVersion, false); } catch { /* */ }
   Object.assign(state, {
-    token: ses.token || null, tokenSource: ses.tokenSource || null, dead: ses.dead || null,
+    token: ses.token || null, tokenSource: ses.tokenSource || null, dead: Array.isArray(ses.dead) ? ses.dead : [],
     accounts: ses.accounts || [], fetchedAt: ses.fetchedAt || 0, truncated: !!ses.truncated, owner: ses.owner || null,
     ads: ses.ads || {}, open: new Set(ses.view?.open), adsHidden: new Set(ses.view?.hidden),
     cooldownUntil: ses.cooldownUntil || 0, usage: ses.usage ?? null,
@@ -284,20 +287,23 @@ function startCooldown() {
 }
 
 // The token is dead (Graph said so earlier): every call refuses before the network, so a dead login is never hammered.
-const isDead = () => !!state.token && state.token === state.dead?.token;
+const deadOf = (token) => (token ? state.dead.find((d) => d.token === token) : undefined);
+const isDead = () => !!deadOf(state.token);
+const deadCode = () => deadOf(state.token)?.code;
 function sessionError(code) {
   const err = new Error(t("err.session", { c: code }));
   err.session = true;
   return err;
 }
 function markDead(token, code) {
-  state.dead = { token, code };
+  state.dead = [...state.dead.filter((d) => d.token !== token), { token, code }].slice(-5);
   saveSession({ dead: state.dead });
   renderToken();
 }
-function clearDead() {
-  state.dead = null;
-  chrome.storage.session.remove("dead");
+function clearDead(token) {
+  if (!deadOf(token)) return;
+  state.dead = state.dead.filter((d) => d.token !== token);
+  saveSession({ dead: state.dead });
 }
 
 // One GET. The token and generation are fixed when the call starts.
@@ -305,7 +311,8 @@ function clearDead() {
 async function graph(path, params = {}, retried = false) {
   const token = state.token, gen = state.gen, ctl = state.ctl;
   if (!token) throw new Error(t("err.noToken"));
-  if (token === state.dead?.token) throw sessionError(state.dead.code);
+  const dead = deadOf(token);
+  if (dead) throw sessionError(dead.code);
   const left = state.cooldownUntil - Date.now();
   if (left > 0) throw new Error(t("err.cooldown", { n: Math.ceil(left / 60000) }));
   const qs = new URLSearchParams(params).toString();
@@ -333,7 +340,7 @@ async function graph(path, params = {}, retried = false) {
     throw new Error(t("err.version", { v: state.apiVersion }));
   }
   // Invalid / expired token, checkpoint, password changed: nothing will work until FB hands out a new token.
-  if (e && isSessionError(e.code, e.error_subcode)) {
+  if (e && isSessionError(e.code)) {
     const code = sessionLabel(e.code, e.error_subcode);
     markDead(token, code);
     throw sessionError(code);
@@ -362,7 +369,8 @@ async function fetchFromPopup(url, token, signal) {
 function grabInPage() {
   // Runs in the page (MAIN world). Returns candidates only; nothing is sent anywhere.
   // It is serialized into the page, so it can't see TOKEN_RE: the patterns below repeat it.
-  const base = { host: location.hostname, path: location.pathname };
+  // loadId changes on every reload of the page: the Accounts tab refreshes by itself once per FB page load.
+  const base = { host: location.hostname, path: location.pathname, loadId: Math.round(performance.timeOrigin) };
   // The page's own token for the surface you're on (Ads Manager → EAAB, Commerce → EAAH, …).
   // Preferred over anything scraped, so switching pages shows the CURRENT token — and no scan is needed.
   try {
@@ -389,7 +397,8 @@ async function facebookTabs() {
   const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
   const isFb = (tab) => tab?.url && isFacebookUrl(tab.url) && !tab.discarded;
   const tabs = (await chrome.tabs.query({ url: ["https://*.facebook.com/*"] })).filter((tab) => isFb(tab) && tab.id !== active?.id);
-  tabs.sort((a, b) => (/adsmanager/.test(b.url) - /adsmanager/.test(a.url)) || ((b.lastAccessed || 0) - (a.lastAccessed || 0)));
+  // Frozen tabs (Chrome's memory saver) run no scripts until activated: asked last, and only with a time limit.
+  tabs.sort((a, b) => (!!a.frozen - !!b.frozen) || (/adsmanager/.test(b.url) - /adsmanager/.test(a.url)) || ((b.lastAccessed || 0) - (a.lastAccessed || 0)));
   return isFb(active) ? [active, ...tabs] : tabs;
 }
 // Best token from one page's answer: the page's own token (matches its surface), then the EAAB heuristic,
@@ -404,7 +413,15 @@ function pickToken(r) {
 // The field only ever shows a token some open FB tab has right now: with no FB tab, or none with a token,
 // the old one is dropped (it couldn't be copied anyway — copying always re-reads the tab).
 // silent: on popup open — no clipboard, no toasts; the reason goes into the token field.
-async function grabToken({ toClipboard = true, silent = false } = {}) {
+// A request started while a grab is still reading the tabs waits for it: it must go out with the token being read now.
+let grabbing = Promise.resolve();
+const settledGrab = () => grabbing;
+function grabToken(opts) {
+  const p = grabTokenNow(opts);
+  grabbing = p.catch(() => null);
+  return p;
+}
+async function grabTokenNow({ toClipboard = true, silent = false } = {}) {
   const op = ++state.grabOp;
   let gen = state.gen;
   const current = () => op === state.grabOp && gen === state.gen;
@@ -424,17 +441,33 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
   const tabs = await facebookTabs();
   if (!current()) return null;
   if (!tabs.length) return none(t("grab.noTab"));
-  // The first tab that has a token wins: the active FB tab may be a page without one (feed, still loading).
-  let pick = null, src = null, read = [];
-  for (const tab of tabs.slice(0, 5)) {
-    let r = null;
-    try { [{ result: r }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world: "MAIN", func: grabInPage }); }
-    catch { /* no access to this tab — try the next one */ }
-    if (!current()) return null;                       // a newer grab happened meanwhile
-    if (!r) continue;
-    read.push(r);
-    pick = pickToken(r);
-    if (pick) { src = r; break; }
+  // Up to 5 tabs at once, so one frozen or busy tab can't stall the popup. Of the tabs that answered, the first in the
+  // order above that has a token wins: the active FB tab may be a page without one (feed, still loading).
+  const picked = tabs.slice(0, 5);
+  const answers = picked.map(() => null);              // null = no answer (yet): no access, frozen, still busy
+  const done = picked.map(() => false);
+  let wake = null;
+  picked.forEach((tab, i) => chrome.scripting.executeScript({ target: { tabId: tab.id }, world: "MAIN", func: grabInPage })
+    .then((res) => { answers[i] = res?.[0]?.result ?? null; }, () => {})
+    .finally(() => { done[i] = true; wake?.(); }));
+  // Stop as soon as the answer can't change: every tab ahead of the first one with a token has answered. A slow tab
+  // ahead of it is waited for TAB_READ_MS; with no token anywhere yet, up to TAB_WAIT_MS (a busy machine is not
+  // "no access").
+  const t0 = Date.now();
+  for (;;) {
+    const first = answers.findIndex((r) => r && pickToken(r));
+    if (done.every(Boolean) || (first >= 0 && done.slice(0, first).every(Boolean))) break;
+    const left = (first >= 0 ? TAB_READ_MS : TAB_WAIT_MS) - (Date.now() - t0);
+    if (left <= 0) break;
+    await new Promise((resolve) => { wake = resolve; setTimeout(resolve, left); });
+  }
+  wake = null;
+  if (!current()) return null;                         // a newer grab happened meanwhile
+  let pick = null, src = null, srcTab = null;
+  const read = answers.filter(Boolean);
+  for (const [i, r] of answers.entries()) {
+    const p = r && pickToken(r);
+    if (p) { pick = p; src = r; srcTab = picked[i]; break; }
   }
   if (!read.length) return none(t("grab.noAccess"));
   if (!pick) return none(t("grab.notFound", { where: read.length === 1 ? String(read[0].host || t("grab.thisTab")) : t("grab.openTabs") }));
@@ -443,11 +476,12 @@ async function grabToken({ toClipboard = true, silent = false } = {}) {
     gen = state.gen;                                   // our own bump, not a token change from elsewhere
     state.token = pick;
   }
-  if (state.dead && state.dead.token !== pick) clearDead();   // a different token: the dead one no longer matters
   if (await checkOwner() && current()) renderAccounts();
   if (!current()) return null;
   state.token = pick;
-  state.tokenSource = { surface: surfaceOf(String(src.host || ""), String(src.path || "")) };
+  // page = this tab + this load of it (see autoLoadAccounts).
+  const loadId = Number.isFinite(src.loadId) ? src.loadId : null;
+  state.tokenSource = { surface: surfaceOf(String(src.host || ""), String(src.path || "")), page: loadId ? `${srcTab.id}:${loadId}` : null };
   await saveSession({ token: pick, tokenSource: state.tokenSource });
   // A token change during the write above (this window or another) supersedes us; if it happened, don't report success.
   if (!current()) return null;
@@ -481,7 +515,7 @@ function renderToken(hint) {
   fill(card,
     el("div", { class: "kind-head" }, el("span", { class: "kind-badge" }, kind), el("span", { class: "kind-app" }, k.app || t("kind.unknown.app"))),
     el("div", { class: "kind-use" }, k.app ? t(`kind.${kind}`) : t("kind.unknown.use")),
-    isDead() ? el("div", { class: "err-text" }, t("kind.dead", { c: state.dead.code })) : null,
+    isDead() ? el("div", { class: "err-text" }, t("kind.dead", { c: deadCode() })) : null,
     // ads-capable → nothing; known non-ads → "not an ads token" + link; unknown → bare link only.
     k.ads === true ? null : adsLink(k.ads === false ? t("kind.notAds") : null),
   );
@@ -493,6 +527,7 @@ async function checkToken() {
   fill(box, el("dt", {}, t("check.checking")), el("dd", {}, "…"));
   btn.disabled = true;
   try {
+    await settledGrab();
     const me = await graph("me", { fields: "id,name" });
     // Sequential on purpose: three small reads, never in parallel.
     // A failed step is shown as "couldn't check"; a Stale one aborts the chain before the next request.
@@ -523,7 +558,7 @@ async function checkToken() {
           el("div", { class: "perm-list" }, granted.join(" · "))) : null);
     }
     fill(box,
-      el("dt", {}, t("check.profile")), el("dd", {}, `${me.name} · `, numEl(me.id)),
+      el("dt", {}, t("check.profile")), el("dd", {}, me.name ? `${me.name} · ` : "", numEl(me.id ?? "—")),
       el("dt", {}, t("check.app")), el("dd", {}, app.err ? errText(t("check.failed", { m: app.err.message }))
         : [`${app.v.name} · `, numEl(app.v.id), KNOWN_APPS[app.v.id] ? ` (${KNOWN_APPS[app.v.id]})` : ""]),
       el("dt", {}, grantedCount === null ? t("check.perms") : t("check.permsN", { n: grantedCount })), el("dd", {}, permsDd),
@@ -604,7 +639,7 @@ async function copyEnv() {
   await readCookies();
   if (gen !== state.gen || state.token !== token) return;
   if (!hasSession()) return toast(t("ck.noSession"), true);
-  if (isDead()) return toast(t("err.session", { c: state.dead.code }), true);   // even when the owner check is cached
+  if (isDead()) return toast(t("err.session", { c: deadCode() }), true);   // even when the owner check is cached
   let own;
   try { own = await ownerCheck(token); }
   catch (e) { if (!(e instanceof Stale)) toast(e.message, true); return; }
@@ -641,14 +676,17 @@ async function fetchAccounts(opts) {
   try { await loadAccountsNow(opts); } finally { accBusy = false; }
 }
 async function loadAccountsNow({ auto = false } = {}) {
+  await settledGrab();
   if (!state.token && !(await grabToken({ toClipboard: false, silent: auto }))) return;   // no token: grabToken says why
-  if (isDead()) return auto ? undefined : toast(t("err.session", { c: state.dead.code }), true);   // before the slot: costs nothing
+  if (isDead()) return auto ? undefined : toast(t("err.session", { c: deadCode() }), true);   // before the slot: costs nothing
   const gen = state.gen;                              // fixed before waiting for the lock
   let wait;
   try { wait = await claimSlot("accounts"); }        // before sending: a failed attempt counts too
   catch (e) { return auto ? undefined : toast(t("err.slot", { m: e.message }), true); }
   if (gen !== state.gen) return;                      // new token while waiting
   if (wait > 0) return auto ? undefined : toast(t("acc.wait", { n: Math.ceil(wait / 1000) }), true);
+  // The request goes out now (a failure counts too): this FB page load has had its list.
+  saveSession({ autoPage: state.tokenSource?.page || null });
   const btn = $("#loadAccounts");
   btn.disabled = true; btn.setAttribute("aria-busy", "true");
   state.accLoading = true; renderAccounts();
@@ -687,19 +725,27 @@ async function loadAccountsNow({ auto = false } = {}) {
     renderAccounts();
   }
 }
-// First time the Accounts tab is shown after the popup was opened: load the list by itself, so nobody has to
-// guess that the refresh button exists. Once per popup open, however it ends (not on every visit to the tab).
-// The limits are a click's: the one-minute slot shared by all windows, the API pause, a dead session.
+// The Accounts tab loads the list by itself when there is nothing loaded yet, or when the FB page the token came
+// from was reloaded since the last load. Reopening the popup or switching tabs alone never sends a request.
+// At most one try per popup open; the limits are a click's (the one-minute slot, the API pause, a dead session).
 let autoTried = false, tokenReadyDone;
 const tokenReady = new Promise((resolve) => { tokenReadyDone = resolve; });   // the silent token read on open has finished
 async function autoLoadAccounts() {
   if (autoTried) return;
   autoTried = true;
-  // Without the silent token read the request could go out with a stale token. Not forever, though:
-  // a frozen FB tab or a failed start must not leave the tab without its list.
-  await Promise.race([tokenReady, new Promise((resolve) => setTimeout(resolve, 15000))]);
-  if (!state.token || isDead() || state.cooldownUntil > Date.now()) return;
-  return fetchAccounts({ auto: true });
+  const placeholder = !state.accounts.length;           // "Loading…" at once, not "press refresh" and then "Loading…"
+  if (placeholder) { state.accLoading = true; renderAccounts(); }
+  try {
+    // Without the silent token read the request could go out with a stale token. Not forever, though.
+    await Promise.race([tokenReady, new Promise((resolve) => setTimeout(resolve, 15000))]);
+    if (!state.token || isDead() || state.cooldownUntil > Date.now()) return;
+    const page = state.tokenSource?.page || null;
+    const { autoPage } = await chrome.storage.session.get("autoPage");
+    if (state.fetchedAt && (!page || page === autoPage)) return;   // loaded before, same FB page load: keep the list
+    await fetchAccounts({ auto: true });
+  } finally {
+    if (placeholder && !accBusy) { state.accLoading = false; renderAccounts(); }
+  }
 }
 // Spend for the selected period. null = unknown (field unavailable, or the cache is from an earlier day
 // in that account's timezone); a missing row = no delivery = 0.
@@ -955,8 +1001,9 @@ async function readAds(id, extra = {}) {
 }
 async function loadAds(id) {
   if (state.adsBusy.has(id)) return;
+  await settledGrab();
   if (!state.token && !(await grabToken({ toClipboard: false }))) return;
-  if (isDead()) return toast(t("err.session", { c: state.dead.code }), true);
+  if (isDead()) return toast(t("err.session", { c: deadCode() }), true);
   const gen = state.gen, busy = state.adsBusy;        // fixed before waiting for the lock
   busy.add(id);
   syncAdsButtons();
@@ -1011,7 +1058,7 @@ async function refreshToken() {
   const btn = $("#refreshToken");
   btn.disabled = true; btn.setAttribute("aria-busy", "true");
   const was = state.token, wasDead = isDead();
-  if (state.dead) clearDead();
+  clearDead(was);
   state.checked = null;                                 // the owner is verified again on the next export
   try {
     const got = await grabToken({ toClipboard: false });   // no token: grabToken toasts why
@@ -1020,15 +1067,24 @@ async function refreshToken() {
 }
 
 // ---------- wiring ----------
-function switchTab(name) {
+// Visual only. The popup opens at the height of the tab it shows: the Accounts tab takes Chrome's full 600 px from
+// the start, so a list arriving a moment later doesn't make the window jump.
+function showTab(name) {
+  document.body.classList.toggle("tall", name === "accounts");
   $$(".tab").forEach((tab) => {
     const on = tab.dataset.tab === name;
     tab.classList.toggle("active", on); tab.setAttribute("aria-selected", String(on)); tab.tabIndex = on ? 0 : -1;
   });
   $$(".panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${name}`));
   try { localStorage.setItem("tab", name); } catch { /* */ }
-  if (name === "accounts") autoLoadAccounts();
 }
+let started = false;                                    // start-up done: the auto-load may run
+function switchTab(name) {
+  showTab(name);
+  if (name === "accounts" && started) autoLoadAccounts();
+}
+const savedTab = () => { try { const v = localStorage.getItem("tab"); return ["token", "cookies", "accounts"].includes(v) ? v : "token"; } catch { return "token"; } };
+showTab(savedTab());                                    // module code runs before the first paint: open on the right tab and height
 
 // RU · EN in the header. Everything is redrawn from state; the token field is re-read from the FB tab (local),
 // the "Check" result is hidden (its text came from Graph in the old language — press again).
@@ -1054,9 +1110,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (j === undefined) return;
     ev.preventDefault(); switchTab(tabs[j].dataset.tab); tabs[j].focus();
   });
-  let lastTab = "token";
-  try { const saved = localStorage.getItem("tab"); if ($$(".tab").some((x) => x.dataset.tab === saved)) lastTab = saved; } catch { /* */ }
-  switchTab(lastTab);                                   // always: it also sets the roving tabindex
   try { const p = localStorage.getItem("period"); if (PERIODS.some((x) => x.key === p)) state.period = p; } catch { /* */ }
   renderPeriods();
 
@@ -1075,11 +1128,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   readCookies();
   // Show the token right away: read it from the open FB tab (local page read, no network request).
   grabToken({ toClipboard: false, silent: true }).catch(console.error).finally(tokenReadyDone);
+  started = true;
+  if (document.body.classList.contains("tall")) autoLoadAccounts();   // opened straight on the Accounts tab
   chrome.storage.session.onChanged?.addListener((ch) => {
     if (ch.cooldownUntil) { state.cooldownUntil = ch.cooldownUntil.newValue || 0; renderUsage(); }
     if (ch.locks) { state.locks = ch.locks.newValue || { accountsAt: 0, ads: {} }; syncAdsButtons(); }
     // Another window found the token dead (or a new token replaced it): follow.
-    if (ch.dead && (ch.dead.newValue?.token || null) !== (state.dead?.token || null)) { state.dead = ch.dead.newValue || null; renderToken(); }
+    if (ch.dead) { state.dead = Array.isArray(ch.dead.newValue) ? ch.dead.newValue : []; renderToken(); }
     // Token dropped or replaced in another window of this extension: drop ours too.
     if (ch.token && (ch.token.newValue || null) !== state.token) {
       newGeneration(); state.grabOp++;

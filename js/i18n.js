@@ -61,7 +61,7 @@ const D = {
     "err.version": "Версия Graph API {v} устарела, а новую Graph не назвал — обнови расширение (API_VERSION в popup.js)",
     "err.graph": "Ошибка Graph", "err.empty": "Пустой ответ Graph", "err.noData": "Неожиданный ответ Graph (нет data)",
     "err.slot": "Не удалось занять слот запроса: {m}",
-    "err.session": "Сессия недействительна (код {c}) — запросы остановлены. Обнови вкладку FB или войди заново",
+    "err.session": "Сессия недействительна или токен от другого аккаунта (код {c}) — запросы остановлены. Обнови вкладку FB или войди заново",
 
     "grab.noTab": "Открой Facebook в этом профиле", "grab.noAccess": "Нет доступа к вкладке FB — обнови её",
     "grab.notFound": "Токен не найден на {where}", "grab.thisTab": "этой вкладке", "grab.openTabs": "открытых вкладках Facebook",
@@ -153,7 +153,7 @@ const D = {
     "err.version": "Graph API {v} is deprecated and Graph named no newer one — update the extension (API_VERSION in popup.js)",
     "err.graph": "Graph error", "err.empty": "Empty Graph response", "err.noData": "Unexpected Graph response (no data)",
     "err.slot": "Could not claim a request slot: {m}",
-    "err.session": "Session is no longer valid (code {c}) — requests stopped. Reload the FB tab or log in again",
+    "err.session": "Session is no longer valid, or the token is from another account (code {c}) — requests stopped. Reload the FB tab or log in again",
 
     "grab.noTab": "Open Facebook in this profile", "grab.noAccess": "No access to the FB tab — reload it",
     "grab.notFound": "No token found on {where}", "grab.thisTab": "this tab", "grab.openTabs": "the open Facebook tabs",

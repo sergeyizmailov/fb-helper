@@ -3,11 +3,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { isSessionError, sessionLabel, verNum, latestVersion, adRank, reviewLines, ownerVerdict, lifetimeSpend, spendFloor } from "../js/pure.js";
 
-test("session errors: 190 and subcodes 459/460/463/467", () => {
-  for (const [c, s] of [[190, undefined], [190, 463], [190, 467], [1, 459], [1, 460], [459, undefined], [467, undefined]])
-    assert.ok(isSessionError(c, s), `${c}/${s}`);
-  for (const [c, s] of [[1, undefined], [10, undefined], [100, 33], [17, 2446079], [2635, undefined], [undefined, undefined]])
-    assert.ok(!isSessionError(c, s), `${c}/${s}`);
+test("session errors: code 190 (any subcode) and 102; subcodes alone are not enough", () => {
+  for (const c of [190, "190", 102]) assert.ok(isSessionError(c), String(c));
+  for (const c of [1, 10, 100, 17, 2635, 459, 463, undefined, null]) assert.ok(!isSessionError(c), String(c));
   assert.equal(sessionLabel(190, 463), "190/463");
   assert.equal(sessionLabel(190), "190");
 });

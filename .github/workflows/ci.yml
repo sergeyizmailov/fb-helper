@@ -16,3 +16,17 @@ jobs:
           for f in js/*.js; do node --input-type=module --check < "$f"; done
       - name: unit tests
         run: node --test test/*.test.mjs
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: playwright-core + Chromium (test-only, not shipped)
+        run: |
+          npm i --no-save --no-package-lock playwright-core@1
+          npx playwright-core install --with-deps chromium
+      - name: e2e (real Chromium + the extension, Facebook and Graph mocked)
+        run: node test/e2e.mjs

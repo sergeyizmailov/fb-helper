@@ -23,8 +23,8 @@ Chrome 121+. A Facebook tab must be open in the same profile; the ads token (EAA
 
 ## Safety and limits
 
-- Requests go only to `graph.facebook.com`: on a button press, or once when you first open the **Ad accounts** tab after opening the popup (it loads the list by itself, so you don't have to find the refresh button; later visits to the tab don't reload it). The token is shown only while an open Facebook tab has it and is never stored beyond the browser session.
-- The account list refreshes at most once a minute (that slot is shared by the automatic load, the refresh button and every open popup; the automatic load is skipped during an API pause and with a dead session), one account's ads at most once per 30 s. On an API rate-limit error all requests stop for 30 min. On a dead session (error 190, subcodes 459 / 460 / 463 / 467) requests with that token stop until Facebook hands out a new one.
+- Requests go only to `graph.facebook.com`: on a button press, or when the **Ad accounts** tab opens with nothing loaded yet or after you reloaded the Facebook page the token came from (so the list is there without looking for the refresh button). Reopening the popup or switching tabs alone sends nothing. The token is shown only while an open Facebook tab has it and is never stored beyond the browser session.
+- The account list refreshes at most once a minute (that slot is shared by the automatic load, the refresh button and every open popup; the automatic load is skipped during an API pause and with a dead session; open Facebook tabs are read in parallel, so a frozen or busy tab doesn't hold the popup), one account's ads at most once per 30 s. On an API rate-limit error all requests stop for 30 min. On a dead session (error 190 or 102) requests with that token stop until Facebook hands out a new one or you press the refresh button next to the token.
 - Graph API version: `v26.0`. When Meta retires it, the extension switches to the newer version Graph names.
 
 ## Build the archive
@@ -38,8 +38,8 @@ zip -qrD fb-helper-2.1.0.zip manifest.json popup.html css js fonts images LICENS
 ## Tests
 
 ```
-node --test test/*.test.mjs   # unit tests, no browser (CI runs these)
-node test/e2e.mjs             # real Chromium + the unpacked extension, Facebook and Graph mocked; needs playwright-core
+node --test test/*.test.mjs   # unit tests, no browser
+node test/e2e.mjs             # real Chromium + the unpacked extension, Facebook and Graph mocked; needs playwright-core (CI runs it too)
 ```
 
 Icons: Lucide (ISC). Font: Golos Text (SIL OFL 1.1). Licenses sit next to the files.
