@@ -1,6 +1,6 @@
 .notes/
 .DS_Store
 *.zip
-dist/
 node_modules/
-release/
+chrome-web-store/release/
+promo/

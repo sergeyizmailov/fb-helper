@@ -1,7 +1,7 @@
-// Unit tests for js/pure.js — plain Node, no browser: `node --test test/*.test.mjs`
+// Unit tests for fb-helper/js/pure.js — plain Node, no browser: `node --test test/*.test.mjs`
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isSessionError, sessionLabel, verNum, latestVersion, adRank, reviewLines, ownerVerdict, lifetimeSpend, spendFloor } from "../js/pure.js";
+import { isSessionError, sessionLabel, verNum, latestVersion, adRank, reviewLines, ownerVerdict, lifetimeSpend, spendFloor } from "../fb-helper/js/pure.js";
 
 test("session errors: code 190 (any subcode) and 102; subcodes alone are not enough", () => {
   for (const c of [190, "190", 102]) assert.ok(isSessionError(c), String(c));

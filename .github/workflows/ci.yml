@@ -12,8 +12,8 @@ jobs:
           node-version: 22
       - name: manifest and syntax
         run: |
-          node -e "const m=require('./manifest.json'); if(m.manifest_version!==3) process.exit(1); console.log(m.name, m.version)"
-          for f in js/*.js; do node --input-type=module --check < "$f"; done
+          node -e "const m=require('./fb-helper/manifest.json'); if(m.manifest_version!==3) process.exit(1); console.log(m.name, m.version)"
+          for f in fb-helper/js/*.js; do node --input-type=module --check < "$f"; done
       - name: unit tests
         run: node --test test/*.test.mjs
   e2e:

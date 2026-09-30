@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const EXT = process.env.EXT_DIR ? path.resolve(process.env.EXT_DIR) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");   // EXT_DIR: test the store build
+const EXT = process.env.EXT_DIR ? path.resolve(process.env.EXT_DIR) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../fb-helper");   // EXT_DIR: test the store build
 const require = createRequire(import.meta.url);
 function loadPlaywright() {
   for (const p of [process.env.PLAYWRIGHT_CORE, "playwright-core", "/opt/homebrew/lib/node_modules/@playwright/cli/node_modules/playwright-core"].filter(Boolean)) {

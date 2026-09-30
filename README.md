@@ -8,9 +8,9 @@ Chrome extension (MV3): Facebook access token, session cookies and ad account st
 
 ## Install
 
-1. Download `fb-helper-2.1.0.zip` from [Releases](https://github.com/slilbudget/fb-helper/releases/latest) and unpack (or `git clone`)
+1. Download `fb-helper-2.1.0.zip` from [Releases](https://github.com/slilbudget/fb-helper/releases/latest) and unpack (or `git clone` and use the `fb-helper/` folder)
 2. `chrome://extensions` → enable **Developer mode**
-3. **Load unpacked** → pick the unpacked folder (keep the folder after installing)
+3. **Load unpacked** → pick the unpacked folder (from a clone: `fb-helper/`; keep the folder after installing)
 
 Chrome 121+. A Facebook tab must be open in the same profile; the ads token (EAAB) comes from `adsmanager.facebook.com`.
 
@@ -27,13 +27,22 @@ Chrome 121+. A Facebook tab must be open in the same profile; the ads token (EAA
 - The account list refreshes at most once a minute (that slot is shared by the automatic load, the refresh button and every open popup; the automatic load is skipped during an API pause and with a dead session; open Facebook tabs are read in parallel, so a frozen or busy tab doesn't hold the popup), one account's ads at most once per 30 s. On an API rate-limit error all requests stop for 30 min. On a dead session (error 190 or 102) requests with that token stop until Facebook hands out a new one or you press the refresh button next to the token.
 - Graph API version: `v26.0`. When Meta retires it, the extension switches to the newer version Graph names.
 
+## Layout
+
+| Folder | What it is |
+|---|---|
+| `fb-helper/` | The extension (FB Helper): `manifest.json`, `popup.html`, `css`, `js`, `fonts`, `images` |
+| `chrome-web-store/` | The Chrome Web Store version (Ads Helper: other name and logo): build script, listing texts, checklist, artwork |
+| `test/` | Unit and end-to-end tests |
+| `docs/` | Images for this README |
+
 ## Build the archive
 
-An explicit list of what ships, so stray files in the folder never end up in the zip:
+```
+(cd fb-helper && zip -qrD ../fb-helper-2.1.0.zip . -x '*.DS_Store') && zip -qj fb-helper-2.1.0.zip LICENSE
+```
 
-```
-zip -qrD fb-helper-2.1.0.zip manifest.json popup.html css js fonts images LICENSE README.md SECURITY.md CONTRIBUTING.md -x '*.DS_Store'
-```
+The Chrome Web Store package (`chrome-web-store/release/ads-helper-<version>.zip`) comes from `chrome-web-store/build.sh`.
 
 ## Tests
 

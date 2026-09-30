@@ -1,14 +1,14 @@
 // Store artwork, rendered from the STORE build (name "Ads Helper", neutral logo) with fictional data:
 // popup captures -> raw/*.png, then the composed images in ./out (store screenshot 1280x800, small tile 440x280,
 // cover 2100x1182, social preview 1280x640). Nothing leaves the machine: Facebook and Graph are route() mocks.
-// Run:  store/build.sh && node store/art/shots.mjs
+// Run:  chrome-web-store/build.sh && node chrome-web-store/art/shots.mjs
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const EXT = path.resolve(HERE, "../../release/chrome-web-store");
+const EXT = path.resolve(HERE, "../release/unpacked");
 const require = createRequire(import.meta.url);
 const { chromium } = [process.env.PLAYWRIGHT_CORE, "playwright-core", "/opt/homebrew/lib/node_modules/@playwright/cli/node_modules/playwright-core"]
   .filter(Boolean).reduce((found, p) => found || (() => { try { return require(p); } catch { return null; } })(), null) || {};
