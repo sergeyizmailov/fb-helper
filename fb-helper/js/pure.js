@@ -30,6 +30,17 @@ export function latestVersion(text, cap = Infinity) {
 export const spendFloor = (today, last30) => (Number(today) || 0) + (Number(last30) || 0);
 export const lifetimeSpend = (amountSpent, floor) => Math.max(Number(amountSpent) || 0, Number(floor) || 0);
 
+// One period of nested insights ({ data: [row] }, as a field alias returns it) -> numbers, for accounts and ads alike.
+// Graph omits the key entirely when there was no delivery in the period (a real 0); a spend that is not a number
+// is unknown (null). `spend` is in major units already.
+export function insightRow(ins) {
+  const r = ins?.data?.[0];
+  if (!r) return { spend: 0, imp: 0, clicks: 0 };
+  const spend = Number(r.spend);
+  if (!Number.isFinite(spend)) return null;
+  return { spend, imp: Number(r.impressions) || 0, clicks: Number(r.inline_link_clicks) || 0, from: r.date_start, to: r.date_stop };
+}
+
 // ---------- ads ----------
 export const AD_PROBLEMS = ["DISAPPROVED", "WITH_ISSUES"];
 // Problem ads first; the rest keep Graph's order (Array.sort is stable).

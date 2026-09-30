@@ -13,7 +13,7 @@ Ads Helper is a Chrome extension that shows, for the Facebook profile you are lo
 | Facebook access token | Read from the Facebook tab you have open (the page's own script variables and HTML) | Shown in the popup; kept in `chrome.storage.session`; sent to `graph.facebook.com` as an `Authorization` header to read your ad accounts; copied to the clipboard only when you press a copy button |
 | Facebook session cookies | `chrome.cookies` for `facebook.com` | Shown in the popup; copied to the clipboard (as a header string or JSON) only when you press a copy button. The `c_user` cookie is also read to notice that you switched Facebook accounts, so cached data of the previous account is dropped |
 | Profile, app and permission data | `graph.facebook.com` (`me`, `app`, `me/permissions`) | Shown in the popup when you press **Check** or copy **Token + cookies** (one `me` read confirms the token belongs to the logged-in user) |
-| Ad account data: names, IDs, status, disable reason, spend, clicks, limits, payment-method label, pixels, business owner, ads and their review status | `graph.facebook.com` (`me/adaccounts`, `act_<id>/ads`) | Shown in the popup; cached in `chrome.storage.session` |
+| Ad account data: names, IDs, status, disable reason, spend, clicks, limits, payment-method label, pixels, business owner, ads with their review status, and each ad's spend, impressions and clicks | `graph.facebook.com` (`me/adaccounts`, `act_<id>/ads`) | Shown in the popup; cached in `chrome.storage.session` |
 | Settings: interface language, newer Graph API version learned from Meta, last open tab and spend period | Your choices / Meta's API responses | `chrome.storage.local` (language, API version) and the popup's `localStorage` (tab, period) |
 
 The token and cookies are authentication data. The extension treats them as such: they are never written to disk by the extension, never logged, never sent anywhere except as described above.
@@ -21,6 +21,7 @@ The token and cookies are authentication data. The extension treats them as such
 ## Network requests
 
 - Requests go only to `https://graph.facebook.com/` and are read-only (`GET`). The extension cannot create, change or delete anything in your ads. This is enforced by the extension's Content Security Policy (`connect-src https://graph.facebook.com`).
+- Opening an account's ads sends two reads: the list of ads, then the numbers per ad (spend, impressions, clicks), so a slow or refused numbers read never costs the list.
 - Requests are made when you press a button, when you open the **Ad accounts** tab with nothing loaded yet, or after you reloaded the Facebook page the token came from. Reopening the popup or switching tabs alone sends nothing.
 - Requests are rate-limited by the extension (accounts once a minute, one account's ads once per 30 seconds, a 30-minute pause after a Meta rate-limit error).
 - Because the request is made from your logged-in browser, the browser attaches your Facebook cookies to it, exactly as when you use facebook.com. Meta's handling of that data is governed by Meta's own privacy policy.
@@ -71,7 +72,7 @@ Changes to this policy are published in this file with a new date. The source co
 
 Ads Helper показывает для профиля Facebook, в который вы вошли в своём браузере, токен доступа, cookie сессии и статус и расход рекламных кабинетов. Всё происходит в вашем браузере. У разработчика нет сервера, и он не получает никаких данных.
 
-- **Что обрабатывается:** токен (читается из открытой вкладки Facebook), cookie facebook.com, данные профиля, приложения и прав токена (`me`, `app`, `me/permissions`), данные кабинетов и объявлений (`me/adaccounts`, `act_<id>/ads`), язык интерфейса, версия Graph API, последняя открытая вкладка и период.
+- **Что обрабатывается:** токен (читается из открытой вкладки Facebook), cookie facebook.com, данные профиля, приложения и прав токена (`me`, `app`, `me/permissions`), данные кабинетов и объявлений, включая расход, показы и клики по каждому объявлению (`me/adaccounts`, `act_<id>/ads`), язык интерфейса, версия Graph API, последняя открытая вкладка и период.
 - **Куда уходит:** только запросы `GET` из вашего браузера на `graph.facebook.com`, только на чтение. Токен уходит туда в заголовке `Authorization`; браузер, как и на facebook.com, прикладывает ваши cookie Facebook. Запросы идут по кнопке, при первом открытии вкладки «Ad accounts» без загруженных данных или после перезагрузки страницы Facebook. Повторное открытие окна и переключение вкладок ничего не отправляют. Частота ограничена самим расширением.
 - **В буфер обмена** токен и cookie попадают только когда вы сами нажали кнопку копирования.
 - **Хранение:** токен и кэш кабинетов — `chrome.storage.session` (в памяти, стираются при закрытии браузера, перезагрузке или обновлении расширения); язык и версия API — `chrome.storage.local`; последняя вкладка и период — `localStorage` окна. Удаление расширения стирает всё. Кэш кабинетов сбрасывается и при входе в другой аккаунт Facebook.

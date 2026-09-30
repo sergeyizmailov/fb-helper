@@ -8,7 +8,7 @@
 // storage.local holds only a newer Graph API version learned from Graph itself.
 
 import { t, tn, has, locale, getLang, setLang, loadLang, applyStatic } from "./i18n.js";
-import { isSessionError, sessionLabel, verNum, latestVersion, AD_PROBLEMS, adRank, reviewLines, ownerVerdict, lifetimeSpend, spendFloor } from "./pure.js";
+import { isSessionError, sessionLabel, verNum, latestVersion, AD_PROBLEMS, adRank, reviewLines, ownerVerdict, lifetimeSpend, spendFloor, insightRow } from "./pure.js";
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -69,6 +69,24 @@ function surfaceOf(host = "", path = "") {
 const BASE_FIELDS = ["name", "account_id", "account_status", "disable_reason", "currency", "timezone_name",
   "amount_spent", "balance", "spend_cap", "created_time", "business{id,name}",
   "business_country_code"];
+// Spend periods. Meta's last_7d / last_30d end yesterday (today excluded). "all" = Meta's amount_spent, raised to 30 days + today if that is more.
+// preset = Graph's date_preset; alias = the field alias its numbers come back under ("all" has neither).
+const PERIODS = [
+  { key: "today", label: "period.today", preset: "today", alias: "p_today" },
+  { key: "yesterday", label: "period.yesterday", preset: "yesterday", alias: "p_yesterday" },
+  { key: "week", label: "period.week", preset: "last_7d", alias: "p_week" },
+  { key: "month", label: "period.month", preset: "last_30d", alias: "p_month" },
+  { key: "all", label: "period.all" },
+];
+// All periods in one request via field aliases (live-checked 2026-09-27). Used by the accounts read and by the
+// per-ad numbers, so switching the period never needs a request.
+const insightsOf = (preset, alias) => `insights.date_preset(${preset}).as(${alias}){spend,impressions,inline_link_clicks}`;
+const PERIOD_INSIGHTS = PERIODS.filter((p) => p.alias).map((p) => insightsOf(p.preset, p.alias)).join(",");
+// Per ad only: "All time" = Graph's date_preset=maximum (Meta keeps at most 37 months; documented, replaced "lifetime" in v10).
+// Accounts use their amount_spent field for it, which has no per-ad twin. Kept apart because it is the heaviest read.
+const AD_ALL = "p_all";
+const AD_ALL_INSIGHTS = insightsOf("maximum", AD_ALL);
+const AD_ALIASES = [...PERIODS.filter((p) => p.alias).map((p) => p.alias), AD_ALL];
 // Extras that some tokens can't read. On a field error only the named one is dropped and the page retried.
 // Today's spend rides on the same call (date_preset=today = each account's own timezone).
 const OPTIONAL_FIELDS = {
@@ -76,20 +94,8 @@ const OPTIONAL_FIELDS = {
   adtrust_dsl: "adtrust_dsl",
   adspaymentcycle: "adspaymentcycle{threshold_amount}",
   adspixels: "adspixels{id,name}",
-  // All periods in one request via field aliases (live-checked 2026-09-27; alias = letters/underscore only).
-  insights: ["today:p_today", "yesterday:p_yesterday", "last_7d:p_week", "last_30d:p_month"]
-    .map((x) => { const [preset, alias] = x.split(":"); return `insights.date_preset(${preset}).as(${alias}){spend,impressions,inline_link_clicks}`; })
-    .join(","),
+  insights: PERIOD_INSIGHTS,
 };
-// Spend periods. Meta's last_7d / last_30d end yesterday (today excluded). "all" = Meta's amount_spent, raised to 30 days + today if that is more.
-const PERIODS = [
-  { key: "today", label: "period.today", alias: "p_today" },
-  { key: "yesterday", label: "period.yesterday", alias: "p_yesterday" },
-  { key: "week", label: "period.week", alias: "p_week" },
-  { key: "month", label: "period.month", alias: "p_month" },
-  { key: "all", label: "period.all" },
-];
-
 // Tone per Meta status code; the label is t("status.<code>") / t("ad.<status>"), disable reasons t("reason.<n>").
 const ACCOUNT_STATUS = { 1: "ok", 2: "bad", 3: "warn", 7: "warn", 8: "warn", 9: "warn", 100: "bad", 101: "bad" };
 const AD_STATUS = {
@@ -107,6 +113,7 @@ const state = {
   // Rate locks survive popup reopen (storage.session), unlike the data cache.
   locks: { accountsAt: 0, ads: {} },
   open: new Set(), ads: {}, adsBusy: new Set(), adsHidden: new Set(),
+  statsBusy: new Set(), noStats: new Set(), noAll: new Set(),   // per-ad numbers: being read / refused by Graph for this account / all-time part refused
   // Generation: bumped on token change. Every request captures it;
   // a response from an older generation is dropped (Stale) and in-flight fetches are aborted.
   gen: 0, ctl: new AbortController(), skip: new Set(),
@@ -169,6 +176,8 @@ function ago(ts) {
   const m = Math.round((Date.now() - ts) / 60000);
   return m < 1 ? t("ago.now") : m < 60 ? t("ago.min", { n: m }) : t("ago.h", { n: Math.round(m / 60) });
 }
+// Was ts still today in this timezone? Cached numbers of an earlier day must not pass for today's.
+const sameDay = (tz, ts) => dayIn(tz, ts) === dayIn(tz, Date.now());
 function dayIn(tz, ts) {
   let f = dayFmts.get(tz);
   if (!f) {
@@ -234,7 +243,7 @@ function newGeneration() {
   state.ctl.abort();
   state.ctl = new AbortController();
   state.skip = new Set();
-  state.adsBusy = new Set();
+  state.adsBusy = new Set(); state.statsBusy = new Set(); state.noStats = new Set(); state.noAll = new Set();
   $("#tokenInfo").classList.add("hidden");
 }
 // Accounts, ads and which rows are open: kept across popup reopen and token changes, dropped when the FB user changes.
@@ -757,12 +766,8 @@ function statsOf(a, key = state.period) {
     return { spend: lifetimeSpend(major(a.amount_spent || 0, a.currency), a._floor), imp: null, clicks: null };
   }
   if (!state.fetchedAt || a._noInsights) return null;
-  if (dayIn(a.timezone_name, state.fetchedAt) !== dayIn(a.timezone_name, Date.now())) return null;
-  const r = a[PERIODS.find((p) => p.key === key).alias]?.data?.[0];
-  if (!r) return { spend: 0, imp: 0, clicks: 0 };
-  const spend = Number(r.spend);
-  if (!Number.isFinite(spend)) return null;
-  return { spend, imp: Number(r.impressions) || 0, clicks: Number(r.inline_link_clicks) || 0, from: r.date_start, to: r.date_stop };
+  if (!sameDay(a.timezone_name, state.fetchedAt)) return null;
+  return insightRow(a[PERIODS.find((p) => p.key === key).alias]);
 }
 // "29.08" in Russian, "Aug 29" in English (d = YYYY-MM-DD from Graph).
 const shortDate = (d) => {
@@ -911,7 +916,7 @@ function renderAccount(a, st) {
        : el("div", { class: "acc-spend muted", title: t("acc.noPeriod") }, "—"),  // .acc-spend uses the number font in CSS
     el("div", { class: "acc-meta" },
       a.business
-        ? el("span", { class: "owner", title: t("acc.inBm", { n: a.business.name, id: a.business.id }) }, el("i", { class: "i i-bm" }), t("acc.bm", { n: a.business.name }))
+        ? el("span", { class: "owner", title: t("acc.inBm", { n: a.business.name, id: a.business.id }) }, el("i", { class: "i i-bm" }), el("span", { class: "owner-name" }, t("acc.bm", { n: a.business.name })))
         : el("span", { class: "owner", title: t("acc.personalTitle") }, el("i", { class: "i i-user" }), t("acc.personal")),
       a.timezone_name ? el("span", { title: t("acc.tz", { tz: a.timezone_name }) }, tzLabel(a.timezone_name)) : null,
       a.disable_reason ? el("span", { class: "err-text" }, `${has(`reason.${a.disable_reason}`) ? t(`reason.${a.disable_reason}`) : t("reason.other")} (${a.disable_reason})`) : null),
@@ -939,7 +944,7 @@ function renderAccount(a, st) {
     adsBox,
   );
   card.append(head, body);
-  if (state.ads[a.account_id]) renderAds(adsBox, state.ads[a.account_id]);
+  if (state.ads[a.account_id]) renderAds(adsBox, state.ads[a.account_id], a);
   return card;
 }
 // ---------- ads ----------
@@ -950,7 +955,7 @@ function syncAdsButtons() {
 }
 const adsBox = (id) => document.querySelector(`[data-ads-box="${CSS.escape(id)}"]`);
 // Only successful reads are kept across popup reopens: an error text would sit on the row long after it is stale.
-const adsToSave = () => Object.fromEntries(Object.entries(state.ads).filter(([, v]) => !v.error).map(([k, { stale, ...v }]) => [k, v]));
+const adsToSave = () => Object.fromEntries(Object.entries(state.ads).filter(([, v]) => !v.error).map(([k, { stale, statsFail, ...v }]) => [k, v]));
 // Before the first load: one "Ads" button. After: a show/hide toggle (no request, uses the
 // cached list) + a refresh icon that re-reads Graph and is the only control bound to the 30 s lock.
 function adsControls(id) {
@@ -966,7 +971,17 @@ function adsControls(id) {
     el("button", { class: "icon-btn sm", "data-ads": id, "data-focus": `ads:${id}`, disabled: adsBlocked(id), title: t("ads.refresh"),
                    "aria-label": t("ads.refresh"), onclick: () => loadAds(id) }, el("i", { class: "i i-refresh" })));
 }
-function renderAds(box, { ads, more, error, stale }) {
+// "$12.40 · 3,100 impressions · 48 clicks". An active ad with no delivery says so; a paused one stays quiet.
+// s = [spend, impressions, clicks] as stored, or null = unknown.
+function adStatsLine(s, status, cur) {
+  if (!s) return null;
+  const [spend, imp, clicks] = s;
+  if (!spend && !imp && !clicks) return status === "ACTIVE" ? el("div", { class: "ad-stats" }, t("ads.noDelivery")) : null;
+  const n = numFmt();
+  return el("div", { class: "ad-stats" }, numEl(fmt(spend, cur)), " · ", numEl(n.format(imp)), ` ${tn(imp, "ads.imp")} · `, numEl(n.format(clicks)), ` ${tn(clicks, "ads.clk")}`,
+    clicks ? [" · CPC ", numEl(fmt(spend / clicks, cur))] : null);
+}
+function renderAds(box, { ads, more, error, stale, stats, statsAt, statsAll, statsFail }, acc) {
   if (!box) return;
   const id = box.dataset.adsBox;
   if (state.adsHidden.has(id)) return fill(box);
@@ -974,16 +989,27 @@ function renderAds(box, { ads, more, error, stale }) {
   if (!ads.length) return fill(box, el("div", { class: "hint" }, t("ads.none")));
   const count = (st) => ads.filter((ad) => st.includes(ad.effective_status)).length;
   const live = count(["ACTIVE"]), rejected = count(AD_PROBLEMS);
+  // Numbers of the selected period. They come from a second read (after the list is on screen), so they may be
+  // loading, refused, or from an earlier day. One hint says which; "All time" adds Meta's 37-month cap.
+  const all = state.period === "all";
+  const alias = all ? AD_ALL : PERIODS.find((p) => p.key === state.period).alias;
+  const fresh = !!stats && sameDay(acc?.timezone_name, statsAt);
+  const shown = fresh && (!all || !!statsAll);
+  const hint = statsFail ? t("ads.statsFail") : state.statsBusy.has(id) ? t("ads.statsLoading")
+    : !stats ? "" : !fresh ? t("ads.old") : all ? t(statsAll ? "ads.allNote" : "ads.noAll") : "";
   fill(box, el("div", { class: "ads-sum" },
       `${ads.length}${more ? "+" : ""} ${tn(ads.length, "ads.count")}`,
-      live ? t("ads.live", { n: live }) : "", rejected ? el("span", { class: "err-text" }, t("ads.rejected", { n: rejected })) : ""),
+      live ? t("ads.live", { n: live }) : "", rejected ? el("span", { class: "err-text" }, t("ads.rejected", { n: rejected })) : "",
+      shown ? t("ads.statsAt", { a: ago(statsAt) }) : ""),
     stale ? el("div", { class: "hint err-text" }, t("ads.stale", { m: stale })) : null,
+    hint ? el("div", { class: "hint" }, hint) : null,
     // Disapproved / with issues first, each with every reason and the placement it applies to.
     ...[...ads].sort((a, b) => adRank(a.effective_status) - adRank(b.effective_status)).map((ad) => {
     const st = ad.effective_status;
     const [l, tone] = st in AD_STATUS ? [t(`ad.${st}`), AD_STATUS[st]] : [st, ""];
     const why = reviewLines(ad);
     return el("div", { class: "ad" }, el("span", {}, ad.name), pill(l, tone),
+      shown ? adStatsLine(stats[ad.id]?.[alias] ?? null, st, acc?.currency) : null,
       why.length ? el("small", {}, why.map((line) => el("span", { class: "why" }, line))) : null);
   }), ...(more ? [el("div", { class: "hint" }, t("ads.more", { n: ads.length }))] : []));
 }
@@ -998,6 +1024,43 @@ async function readAds(id, extra = {}) {
       state.skip.add("issues_info");
     }
   }
+}
+// The numbers per ad (every period), read AFTER the list is on screen: a heavy, slow or refused statistics read
+// costs only the numbers, never the list. Stored compact: { adId: { p_today: [spend, impressions, clicks] | null } }
+// (null = spend unknown; an ad Graph returned without a period key had no delivery = zeros).
+// The first 100 ads only. The all-time part ("maximum") is the heaviest: if Graph refuses ("reduce the amount of
+// data", or the field) it is dropped for this account and the other periods are read again; a refusal of the rest
+// is remembered for the account too (never asked again until the token changes).
+const readStats = (id, withAll) => graph(`act_${id}/ads`, { fields: `id,${PERIOD_INSIGHTS}${withAll ? `,${AD_ALL_INSIGHTS}` : ""}`, limit: "100" });
+const refused = (e) => e.code === 1 || e.code === 100;
+async function loadAdStats(id, gen, entry) {
+  if (state.noStats.has(id) || gen !== state.gen) return;
+  state.statsBusy.add(id); renderAccounts();
+  let patch, withAll = !state.noAll.has(id);
+  try {
+    let res;
+    try { res = await readStats(id, withAll); }
+    catch (e) {
+      if (e instanceof Stale || !withAll || !refused(e)) throw e;
+      state.noAll.add(id); withAll = false;
+      res = await readStats(id, false);
+    }
+    if (!Array.isArray(res.data)) throw new Error(t("err.noData"));
+    const stats = {};
+    for (const row of res.data) stats[row.id] = Object.fromEntries(AD_ALIASES.filter((a) => withAll || a !== AD_ALL).map((a) => {
+      const r = insightRow(row[a]);
+      return [a, r && [r.spend, r.imp, r.clicks]];
+    }));
+    patch = { stats, statsAt: Date.now(), statsAll: withAll, statsFail: undefined };
+  } catch (e) {
+    if (e instanceof Stale) return;                       // a newer token owns the sets now
+    if (refused(e)) state.noStats.add(id);
+    patch = { statsFail: true };
+  }
+  state.statsBusy.delete(id);
+  if (gen === state.gen && state.ads[id] === entry) state.ads[id] = { ...entry, ...patch };
+  saveSession({ ads: adsToSave() });
+  renderAccounts();
 }
 async function loadAds(id) {
   if (state.adsBusy.has(id)) return;
@@ -1019,6 +1082,7 @@ async function loadAds(id) {
   setTimeout(syncAdsButtons, ADS_LOCK_MS + 50);
   const box = adsBox(id);
   if (box) fill(box, el("div", { class: "hint" }, t("ads.loading")));
+  let entry = null;
   try {
     const res = await readAds(id);
     if (!Array.isArray(res.data)) throw new Error(t("err.noData"));
@@ -1034,7 +1098,8 @@ async function loadAds(id) {
         toast(e.message, true);                        // the first page is still worth showing
       }
     }
-    state.ads[id] = { ads: list, more: !!res.paging?.next };
+    const prev = state.ads[id];                         // the earlier numbers stay (dated) until the new ones arrive
+    state.ads[id] = entry = { ads: list, more: !!res.paging?.next, stats: prev?.stats, statsAt: prev?.statsAt, statsAll: prev?.statsAll };
   } catch (e) {
     if (e instanceof Stale) return;
     // A failed refresh must not wipe the list you already have (a pause, a dead session, a timeout),
@@ -1049,6 +1114,7 @@ async function loadAds(id) {
   state.adsHidden.delete(id);                           // a fresh load is shown expanded
   saveSession({ ads: adsToSave() }); saveView();
   renderAccounts();
+  if (entry) await loadAdStats(id, gen, entry);        // the list is on screen; the numbers follow
 }
 
 // The ⟳ next to the token: read it again from the open FB tabs (no clipboard, no request to Graph).

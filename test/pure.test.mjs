@@ -1,7 +1,7 @@
 // Unit tests for fb-helper/js/pure.js — plain Node, no browser: `node --test test/*.test.mjs`
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isSessionError, sessionLabel, verNum, latestVersion, adRank, reviewLines, ownerVerdict, lifetimeSpend, spendFloor } from "../fb-helper/js/pure.js";
+import { isSessionError, sessionLabel, verNum, latestVersion, adRank, reviewLines, ownerVerdict, lifetimeSpend, spendFloor, insightRow } from "../fb-helper/js/pure.js";
 
 test("session errors: code 190 (any subcode) and 102; subcodes alone are not enough", () => {
   for (const c of [190, "190", 102]) assert.ok(isSessionError(c), String(c));
@@ -86,4 +86,13 @@ test("lifetimeSpend: amount_spent that lags is lifted to the proven floor, never
   assert.equal(lifetimeSpend(5, undefined), 5, "no insights read: Meta's number as is");
   assert.equal(lifetimeSpend(undefined, undefined), 0);
   assert.equal(lifetimeSpend("12.5", 1), 12.5);
+});
+
+test("insightRow: one nested insights period -> numbers; no key = a real 0; a bad spend = unknown", () => {
+  assert.deepEqual(insightRow({ data: [{ spend: "12.40", impressions: "3100", inline_link_clicks: "48", date_start: "2026-09-30", date_stop: "2026-09-30" }] }),
+    { spend: 12.4, imp: 3100, clicks: 48, from: "2026-09-30", to: "2026-09-30" });
+  assert.deepEqual(insightRow(undefined), { spend: 0, imp: 0, clicks: 0 });
+  assert.deepEqual(insightRow({ data: [] }), { spend: 0, imp: 0, clicks: 0 });
+  assert.equal(insightRow({ data: [{ spend: "n/a" }] }), null);
+  assert.deepEqual(insightRow({ data: [{ spend: "5" }] }), { spend: 5, imp: 0, clicks: 0, from: undefined, to: undefined }, "missing counters are 0");
 });

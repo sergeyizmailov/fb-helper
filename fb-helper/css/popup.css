@@ -34,7 +34,8 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
-  width: 540px;
+  /* 560px in the popup (Chrome allows up to 800); in a narrower window (popup opened as a tab, side panel) it shrinks to fit. */
+  width: 560px; max-width: 100%; margin: 0 auto;
   /* No fixed height: the popup auto-sizes to its content and grows as sections expand
      (Chrome's own hard cap of ~600px is the only limit, past which Chrome adds its scrollbar). */
   background: var(--color-background-surface); color: var(--color-text-primary);
@@ -318,7 +319,8 @@ main { padding-bottom: 0; }
 .acc-spend { justify-self: end; font-size: var(--text-lg); white-space: nowrap; }
 .acc-spend.muted { color: var(--color-text-disabled); }
 .acc-sub { justify-self: end; text-align: right; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
-.owner { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.owner { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; }
+.owner-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* a long BM name ends in "…"; the full one is the tooltip */
 .owner .i { --size-icon: 14px; }
 .acc-meta { min-width: 0; padding-left: 22px; display: flex; flex-wrap: wrap; gap: 2px var(--spacing-3); color: var(--color-text-secondary); }
 .acc-body { display: none; gap: var(--spacing-3); padding: var(--spacing-1) var(--spacing-4) var(--spacing-4) calc(var(--spacing-4) + 22px); }
@@ -332,6 +334,8 @@ main { padding-bottom: 0; }
 .icon-btn.sm .i { --size-icon: 16px; }
 .ad { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--spacing-2); align-items: center; padding: var(--spacing-2) 0; border-top: 1px solid var(--color-border); }
 .ad > span:first-child { overflow-wrap: anywhere; }
+.ads .hint:not(:last-child) { padding-bottom: var(--spacing-2); }
+.ad-stats { grid-column: 1 / -1; color: var(--color-text-secondary); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .ad small { grid-column: 1 / -1; color: var(--color-error); overflow-wrap: anywhere; }
 .ad small .why { display: block; }
 .empty { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-4); }
@@ -344,3 +348,12 @@ main { padding-bottom: 0; }
 .toast.show { opacity: 1; }
 .toast.err { background: var(--color-error); }
 
+/* ---------- narrow window (popup opened as a tab or in a small window): the same layout, tighter ---------- */
+@media (max-width: 460px) {
+  .seg { grid-template-columns: repeat(3, 1fr); }
+  .kv { grid-template-columns: 96px minmax(0, 1fr); }
+  .acc-body { padding-left: var(--spacing-4); }
+  #copyLiveIds span { display: none; }
+  .total { grid-template-columns: minmax(0, 1fr); }
+  .total-meta { text-align: left; white-space: normal; }
+}

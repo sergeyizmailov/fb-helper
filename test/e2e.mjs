@@ -270,7 +270,7 @@ async function adsFlows() {
 
   let b = await boot({ fb: adsFb(TOK), graph: (u) => isAds(u) ? { body: { data: [base, rejected, igOnly, issues] } } : { body: accountsJson } });
   let pop = await open(b);
-  const adHits = () => b.hits.filter((h) => h.includes("/ads?"));
+  const adHits = () => b.hits.filter((h) => h.includes("/ads?") && !h.includes("p_today"));   // list reads; the numbers are a second read
   ok("issues_info is requested", has(adHits()[0], "issues_info"), adHits()[0]);
   const names = await pop.$$eval(".ad > span:first-child", (n) => n.map((x) => x.textContent));
   ok("problem ads come first", names.slice(0, 3).sort().join() === "IG only,Issues,Rejected" && names[3] === "Fine", names.join());
@@ -304,7 +304,7 @@ async function adsFlows() {
     return { body: { data: [base] } };
   } });
   pop = await open(b);
-  const ah = b.hits.filter((h) => h.includes("/ads?"));
+  const ah = b.hits.filter((h) => h.includes("/ads?") && !h.includes("p_today"));
   ok("issues_info refused -> one retry without it", ah.length === 2 && !has(ah[1], "issues_info"), ah.join(" | "));
   ok("ads still shown", (await pop.locator(".ad").count()) === 1);
   await b.ctx.close();
@@ -327,6 +327,97 @@ async function adsFlows() {
   ok("first load fails: error on the row", has(await text(pop, ".ads"), "boom"), await text(pop, ".ads"));
   ok("…and is not persisted", !JSON.stringify((await stored(pop, "ads")) || {}).includes("boom"));
   await b.ctx.close();
+
+  // per-ad numbers: a second read after the list, every period at once, switching the period sends nothing
+  const ins = (spend, imp, clicks) => ({ data: [{ spend, impressions: imp, inline_link_clicks: clicks, date_start: "2026-09-30", date_stop: "2026-09-30" }] });
+  const listAds = [
+    { id: "s1", name: "Busy", effective_status: "ACTIVE" },
+    { id: "s2", name: "Idle live", effective_status: "ACTIVE" },
+    { id: "s3", name: "Idle paused", effective_status: "PAUSED" },
+    { id: "s4", name: "Single", effective_status: "ACTIVE" },
+  ];
+  const statRows = [
+    { id: "s1", p_today: ins("12.4", "3100", "48"), p_week: ins("80", "20000", "310"), p_all: ins("500", "400000", "9000") },
+    { id: "s2" }, { id: "s3" },
+    { id: "s4", p_today: ins("0.5", "1", "1"), p_all: ins("0.5", "1", "1") },
+  ];
+  const isStats = (u) => u.searchParams.get("fields").includes("p_today");
+  let statsMode = "ok";
+  const statMock = (u) => {
+    if (!isAds(u)) return { body: accountsJson };
+    if (!isStats(u)) return { body: { data: listAds } };
+    if (statsMode === "noall" && u.searchParams.get("fields").includes("p_all")) return { status: 400, body: { error: { code: 1, message: "Please reduce the amount of data you're asking for, then retry your request" } } };
+    if (statsMode === "heavy") return { status: 400, body: { error: { code: 1, message: "Please reduce the amount of data you're asking for, then retry your request" } } };
+    if (statsMode === "field") return { status: 400, body: { error: { code: 100, message: "(#100) Tried accessing nonexisting field (insights) on node type (Ad)" } } };
+    if (statsMode === "down") return { status: 500, body: { error: { code: 2, message: "temporary" } } };
+    return { body: { data: statRows } };
+  };
+  b = await boot({ fb: adsFb(TOK), graph: statMock });
+  pop = await open(b);
+  await until(pop, () => /numbers:/.test(document.querySelector(".ads-sum")?.textContent || ""));
+  const adLines = () => pop.$$eval(".ad", (n) => n.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
+  const listCalls = () => b.hits.filter((h) => h.includes("/ads?") && !h.includes("p_today")).length;
+  const statCalls = () => b.hits.filter((h) => h.includes("/ads?") && h.includes("p_today")).length;
+  const statCalls2 = (bb) => bb.hits.filter((h) => h.includes("/ads?") && h.includes("p_today")).length;
+  let lines = await adLines();
+  const stat = b.hits.find((h) => h.includes("/ads?") && h.includes("p_today"));
+  ok("the numbers are a separate read with all four periods", statCalls() === 1 && ["p_today", "p_yesterday", "p_week", "p_month", "p_all", "maximum", "spend", "impressions", "inline_link_clicks"].every((k) => has(stat, k)), stat);
+  ok("the list read stays free of insights", !b.hits.filter((h) => h.includes("/ads?") && !h.includes("p_today")).some((h) => has(h, "insights")));
+  ok("ad row: spend, impressions, clicks", has(lines[0], "$12.40") && has(lines[0], "3,100 impressions") && has(lines[0], "48 clicks") && has(lines[0], "CPC $0.26"), lines[0]);
+  ok("singular counts", has(lines[3], "1 impression ") && has(lines[3], "1 click") && !has(lines[3], "1 clicks") && !has(lines[3], "1 impressions"), lines[3]);
+  ok("active ad without delivery says so", has(lines[1], "No delivery in this period"), lines[1]);
+  ok("paused ad without delivery stays quiet", !has(lines[2], "No delivery") && !has(lines[2], "$"), lines[2]);
+  ok("the sum line says how old the numbers are", has(await text(pop, ".ads-sum"), "numbers: just now"), await text(pop, ".ads-sum"));
+  const calls = statCalls();
+  await pop.click('.seg-btn:has-text("7 days")');
+  lines = await adLines();
+  ok("switching to 7 days shows that period's numbers", has(lines[0], "$80.00") && has(lines[0], "310 clicks"), lines[0]);
+  ok("…without a request", statCalls() === calls && listCalls() === 1);
+  await pop.click('.seg-btn:has-text("All time")');
+  lines = await adLines();
+  ok("All time: per-ad numbers and CPC", has(lines[0], "$500.00") && has(lines[0], "400,000 impressions") && has(lines[0], "9,000 clicks") && has(lines[0], "CPC $0.06"), lines[0]);
+  ok("All time: says Meta caps it at 37 months", has(await text(pop, ".ads"), "capped at 37 months"), await text(pop, ".ads"));
+  ok("…still without a request", statCalls() === calls);
+  await pop.click('.seg-btn:has-text("Today")');
+  ok("numbers are persisted compact (no raw Graph objects)", !JSON.stringify(await stored(pop, "ads")).includes("date_start"));
+  // a day later the cached numbers must not pass for today's
+  await pop.evaluate(() => chrome.storage.session.get("ads").then((o) => { for (const v of Object.values(o.ads)) v.statsAt -= 2 * 86400000; return chrome.storage.session.set({ ads: o.ads }); }));
+  const oldPop = await popup(b, "accounts"); await rowsAre(oldPop, ".acc", 1);
+  const oldTxt = await oldPop.evaluate(() => document.querySelector(".ads").textContent);
+  ok("cached from an earlier day: hint, no numbers", has(oldTxt, "out of date") && !has(oldTxt, "$12.40"), oldTxt);
+  await b.ctx.close();
+
+  // only the all-time part is refused: the other periods are read again and shown, All time says so
+  statsMode = "noall";
+  b = await boot({ fb: adsFb(TOK), graph: statMock });
+  pop = await open(b);
+  await until(pop, () => /numbers:/.test(document.querySelector(".ads-sum")?.textContent || ""));
+  const sc = b.hits.filter((h) => h.includes("/ads?") && h.includes("p_today"));
+  ok("all-time refused -> one retry without it", sc.length === 2 && has(sc[0], "p_all") && !has(sc[1], "p_all") && has(sc[1], "p_month"), sc.length + " " + sc.map((h) => has(h, "p_all")).join());
+  lines = await adLines();
+  ok("all-time refused -> Today still shown", has(lines[0], "$12.40"), lines[0]);
+  await pop.click('.seg-btn:has-text("All time")');
+  ok("all-time refused -> no numbers, one honest hint", (await pop.locator(".ad-stats").count()) === 0 && has(await text(pop, ".ads"), "did not return all-time numbers"), await text(pop, ".ads"));
+  await b.ctx.close();
+
+  // the numbers fail (too heavy / field refused / server down): the list stays, one hint, nothing else lost
+  for (const mode of ["heavy", "field", "down"]) {
+    statsMode = mode;
+    b = await boot({ fb: adsFb(TOK), graph: statMock });
+    pop = await open(b);
+    await until(pop, () => /did not load/.test(document.querySelector(".ads")?.textContent || ""));
+    ok(`numbers ${mode}: list shown (4 ads), hint, no stats lines`, (await pop.locator(".ad").count()) === 4 && (await pop.locator(".ad-stats").count()) === 0 && has(await text(pop, ".ads"), "Ad numbers did not load"), await text(pop, ".ads"));
+    ok(`numbers ${mode}: the failure mark is not persisted`, !JSON.stringify(await stored(pop, "ads")).includes("statsFail"));
+    if (mode !== "down") {
+      await resetLocks(pop);
+      const before = statCalls2(b);
+      await pop.click(".acc.open .icon-btn[data-ads]");
+      await pop.waitForTimeout(600);
+      ok(`numbers ${mode}: refused for this account -> not asked again`, statCalls2(b) === before, `${before} -> ${statCalls2(b)}`);
+    }
+    await b.ctx.close();
+  }
+  statsMode = "ok";
 }
 
 // ---------- token + cookies export: same account? ----------
@@ -536,8 +627,34 @@ async function deadExportFlows() {
   await b.ctx.close();
 }
 
+// ---------- layout: long names, small windows ----------
+async function layoutFlows() {
+  console.log("\n# layout");
+  const glued = "W".repeat(90);
+  const long = "Very long ad account name with plenty of words to wrap or cut ".repeat(3);
+  const accs = { data: [
+    { account_id: "111", name: glued, account_status: 1, currency: "VND", timezone_name: "UTC", amount_spent: "123456789012345", business: { id: "9", name: glued + " Holding" }, adspixels: { data: [{ id: "7", name: glued }] }, funding_source_details: { display_string: long } },
+    { account_id: "222", name: long, account_status: 2, disable_reason: 1, currency: "USD", timezone_name: "UTC", amount_spent: "1", business: { id: "8", name: long } },
+  ] };
+  const ads = { data: [{ id: "a1", name: glued, effective_status: "DISAPPROVED", ad_review_feedback: { global: { [glued]: glued } } }, { id: "a2", name: long, effective_status: "ACTIVE" }] };
+  const b = await boot({ fb: adsFb(TOK), graph: (u) => isAds(u) ? { body: ads } : { body: accs } });
+  await adsPage(b);
+  const pop = await popup(b, "accounts");
+  await loadAccounts(pop, 2);
+  await pop.click(".acc .acc-title"); await pop.click(".acc.open [data-ads]");
+  await until(pop, () => document.querySelectorAll(".ad").length === 2);
+  const widthOf = (w) => pop.setViewportSize({ width: w, height: 700 }).then(() => pop.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth })));
+  for (const w of [800, 560, 480, 360, 320]) {
+    const m = await widthOf(w);
+    ok(`no horizontal scroll at ${w}px (long names, ads, BM, pixels)`, m.sw <= m.cw, JSON.stringify(m));
+  }
+  const body600 = await pop.evaluate(() => { document.documentElement.style.width = "1000px"; return document.body.getBoundingClientRect().width; });
+  ok("the popup body is 560px wide", body600 === 560, String(body600));
+  await b.ctx.close();
+}
+
 const only = process.argv[2];
-const flows = { token: tokenFlows, fallback: fallbackFlows, version: versionFlows, cache: cacheFlows, session: sessionFlows, ads: adsFlows, export: exportFlows, deadexport: deadExportFlows, auto: autoFlows, alltime: allTimeFlows, hung: hungFlows };
+const flows = { token: tokenFlows, fallback: fallbackFlows, version: versionFlows, cache: cacheFlows, session: sessionFlows, ads: adsFlows, export: exportFlows, deadexport: deadExportFlows, auto: autoFlows, alltime: allTimeFlows, layout: layoutFlows, hung: hungFlows };
 try {
   for (const [name, fn] of Object.entries(flows)) if (!only || only === name) await fn();
 } catch (e) { console.error("CRASH", e); fails++; }

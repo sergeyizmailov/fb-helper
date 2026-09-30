@@ -3,11 +3,11 @@
 The repo and GitHub stay **FB Helper** (`fb-helper/`). Only the store build is **Ads Helper** with the neutral logo (`chrome-web-store/icons/logo-source.png`, `chrome-web-store/icons/`).
 
 ## 1. Build
-- [ ] `chrome-web-store/build.sh` → `chrome-web-store/release/unpacked/` (exact ZIP contents) and `chrome-web-store/release/ads-helper-2.1.0.zip`
+- [ ] `chrome-web-store/build.sh` → `chrome-web-store/release/unpacked/` (exact ZIP contents) and `chrome-web-store/release/ads-helper-2.2.0.zip`
 - [ ] `node --test test/*.test.mjs` passes
 - [ ] `EXT_DIR=chrome-web-store/release/unpacked node test/e2e.mjs` passes (runs the store build, not the repo)
-- [ ] `manifest.json` is at the ZIP root (`unzip -l chrome-web-store/release/ads-helper-2.1.0.zip | grep -x '.*manifest.json'`), no comments in it
-- [ ] Version is higher than any previously uploaded version (first upload: 2.1.0 is fine; every later upload needs a bump)
+- [ ] `manifest.json` is at the ZIP root (`unzip -l chrome-web-store/release/ads-helper-2.2.0.zip | grep -x '.*manifest.json'`), no comments in it
+- [ ] Version is higher than any previously uploaded version (2.1.0 is the first upload; every later upload needs a bump — this one is 2.2.0)
 - [ ] No `FB Helper`, no Facebook "f" logo in the package (the build script fails if the old name is left; icons come from `chrome-web-store/icons/`)
 
 ## 2. Manual test of the unpacked store build
@@ -36,7 +36,7 @@ The repo and GitHub stay **FB Helper** (`fb-helper/`). Only the store build is *
 - [ ] Trader / non-trader status declared honestly (Dashboard → Account)
 
 ## 5. Dashboard (copy from `STORE_LISTING.md`)
-- [ ] Package: upload `chrome-web-store/release/ads-helper-2.1.0.zip`
+- [ ] Package: upload `chrome-web-store/release/ads-helper-2.2.0.zip`
 - [ ] Store listing: description, category, language, store icon `chrome-web-store/icons/icon_128.png`, screenshots, small promo tile
 - [ ] Privacy: single purpose, justification for `cookies`, `storage`, `scripting`, host permission, remote code = **No**, data usage boxes (Authentication information, PII, Financial and payment information), three certifications, privacy policy URL
 - [ ] Distribution: visibility and regions

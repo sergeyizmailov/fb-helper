@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Ads Helper 2.1.0
+# Chrome Web Store listing — Ads Helper 2.2.0
 
 Copy each block into the Developer Dashboard. Every statement below matches the code of this version.
 
@@ -23,7 +23,7 @@ WHAT IT DOES
 • Token: reads the access token from a Facebook tab you already have open and shows its type (EAAB Ads Manager, EAAI Automated Rules, EAAG Business Manager, EAAH Commerce Manager, EAAd Events Manager). "Check" shows the profile, the app and the permissions behind the token. One click copies it.
 • Cookies: the Facebook session cookies of this browser profile, as a header string or as JSON. "Token + cookies" copies both in one block, after confirming the token belongs to the logged-in user.
 • Ad accounts: every ad account of the profile with status, disable reason, spend for today / yesterday / 7 / 30 days / all time, clicks and CPC, daily limit, billing threshold, payment method label, pixels and business owner. Search; active accounts first, then by spend; one button copies the IDs of all active accounts.
-• Ads: the ads of an account with their statuses and review results, every rejection reason with the placement it applies to, disapproved ads first.
+• Ads: the ads of an account with their statuses and review results, every rejection reason with the placement it applies to, disapproved ads first, and each ad's spend, impressions, clicks and CPC for the selected period, including all time.
 • English and Russian interface.
 
 PRIVACY AND SAFETY
@@ -47,7 +47,7 @@ Ads Helper показывает три вещи о профиле Facebook, в �
 • Токен: читает токен из уже открытой вкладки Facebook и показывает его тип (EAAB, EAAI, EAAG, EAAH, EAAd). «Проверить» показывает профиль, приложение и права токена. Копируется одним кликом.
 • Cookie: cookie сессии Facebook этого профиля браузера строкой заголовка или JSON. «Токен + cookie» копирует всё одним блоком, предварительно убедившись, что токен принадлежит вошедшему пользователю.
 • Кабинеты: все рекламные кабинеты профиля со статусом, причиной блокировки, расходом за сегодня / вчера / 7 / 30 дней / всё время, кликами и CPC, дневным лимитом, порогом оплаты, способом оплаты, пикселями и владельцем БМ. Поиск; сначала активные, затем по расходу; одна кнопка копирует ID всех активных кабинетов.
-• Объявления: объявления кабинета со статусами и результатом проверки, каждая причина отклонения с плейсментом, отклонённые сверху.
+• Объявления: объявления кабинета со статусами и результатом проверки, каждая причина отклонения с плейсментом, отклонённые сверху, и расход, показы, клики и CPC по каждому объявлению за выбранный период, включая всё время.
 • Интерфейс на русском и английском.
 
 КОНФИДЕНЦИАЛЬНОСТЬ
