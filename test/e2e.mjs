@@ -246,10 +246,11 @@ async function sessionFlows() {
   await adsPage(b2);
   pop = await popup(b2, "accounts");
   await loadAccounts(pop, 1); await openAds(pop);
-  b2.graph = () => dead(190, 463); await resetLocks(pop);
-  const toast = await clickToast(pop, ".acc.open .icon-btn[data-ads]");
+  b2.graph = (u) => isAds(u) ? dead(190, 463) : { body: accountsJson }; await resetLocks(pop);
+  await pop.click("#loadAccounts");
+  await until(pop, () => /190\/463/.test(document.querySelector(".ads")?.textContent || ""));
   ok("failed ads refresh keeps the list", has(await text(pop, ".ads"), "Keep me"), await text(pop, ".ads"));
-  ok("…and reports the code in a toast", has(toast, "190/463"), toast);
+  ok("…and the row reports the code", has(await text(pop, ".ads"), "190/463"), await text(pop, ".ads"));
   await b2.ctx.close();
 }
 
@@ -314,10 +315,11 @@ async function adsFlows() {
   b = await boot({ fb: adsFb(TOK), graph: (u) => isAds(u) ? (fail ? { status: 500, body: { error: { code: 1, message: "boom" } } } : { body: { data: [base] } }) : { body: accountsJson } });
   pop = await open(b);
   fail = true; await resetLocks(pop);
-  const toast = await clickToast(pop, ".acc.open .icon-btn[data-ads]");
+  await pop.click("#loadAccounts");
+  await until(pop, () => /Not refreshed/.test(document.querySelector(".ads")?.textContent || ""));
   ok("failed refresh: list kept", (await pop.locator(".ad").count()) === 1);
-  ok("failed refresh: error toast", has(toast, "boom"), toast);
   ok("failed refresh: the row says the list is old", has(await text(pop, ".ads"), "Not refreshed: boom"), await text(pop, ".ads"));
+  ok("failed refresh: no error toast for a batch member", !has(await text(pop, "#toast"), "boom"), await text(pop, "#toast"));
   ok("…and that mark is not persisted", !JSON.stringify(await stored(pop, "ads")).includes("stale"));
   ok("stored ads have no error text", !JSON.stringify(await stored(pop, "ads")).includes("boom"));
   await b.ctx.close();
@@ -376,7 +378,7 @@ async function adsFlows() {
   await pop.click('.seg-btn:has-text("All time")');
   lines = await adLines();
   ok("All time: per-ad numbers and CPC", has(lines[0], "$500.00") && has(lines[0], "400,000 impressions") && has(lines[0], "9,000 clicks") && has(lines[0], "CPC $0.06"), lines[0]);
-  ok("All time: says Meta caps it at 37 months", has(await text(pop, ".ads"), "capped at 37 months"), await text(pop, ".ads"));
+  ok("All time: no extra note under the sum line", !has(await text(pop, ".ads"), "37 months") && (await pop.locator(".ads .hint").count()) === 0, await text(pop, ".ads"));
   ok("…still without a request", statCalls() === calls);
   await pop.click('.seg-btn:has-text("Today")');
   ok("numbers are persisted compact (no raw Graph objects)", !JSON.stringify(await stored(pop, "ads")).includes("date_start"));
@@ -385,6 +387,28 @@ async function adsFlows() {
   const oldPop = await popup(b, "accounts"); await rowsAre(oldPop, ".acc", 1);
   const oldTxt = await oldPop.evaluate(() => document.querySelector(".ads").textContent);
   ok("cached from an earlier day: hint, no numbers", has(oldTxt, "out of date") && !has(oldTxt, "$12.40"), oldTxt);
+  await b.ctx.close();
+
+  // one refresh button: the account list AND the ads on screen; collapsed / closed ones are not asked
+  const liveAds = listAds.map((a) => ({ ...a })), liveRows = statRows.map((r) => ({ ...r }));
+  b = await boot({ fb: adsFb(TOK), graph: (u) => !isAds(u) ? { body: accountsJson } : isStats(u) ? { body: { data: liveRows } } : { body: { data: liveAds } } });
+  pop = await open(b);
+  await until(pop, () => /numbers:/.test(document.querySelector(".ads-sum")?.textContent || ""));
+  ok("no separate refresh icon on the ads", (await pop.locator(".acc.open .icon-btn[data-ads]").count()) === 0);
+  const [l0, s0, a0] = [listCalls(), statCalls(), b.hits.filter((h) => !h.includes("/ads?")).length];
+  liveAds[0].name = "Busy renamed"; liveRows[0].p_today = ins("20", "4000", "50");
+  await resetLocks(pop); await pop.click("#loadAccounts");
+  await until(pop, () => /Busy renamed/.test(document.querySelector(".ad")?.textContent || "") && /\$20\.00/.test(document.querySelector(".ad")?.textContent || ""));
+  lines = await adLines();
+  ok("refresh re-reads the ads on screen: new list and new numbers", has(lines[0], "Busy renamed") && has(lines[0], "$20.00") && has(lines[0], "50 clicks"), lines[0]);
+  ok("…one accounts read, one list read, one numbers read", b.hits.filter((h) => !h.includes("/ads?")).length === a0 + 1 && listCalls() === l0 + 1 && statCalls() === s0 + 1, `${a0}/${l0}/${s0} -> ${b.hits.filter((h) => !h.includes("/ads?")).length}/${listCalls()}/${statCalls()}`);
+  ok("…the list stays expanded", (await pop.locator(".ad").count()) === 4);
+  await pop.click(".acc.open .actions button");                  // collapse
+  const [l1, s1] = [listCalls(), statCalls()];
+  await resetLocks(pop); await pop.click("#loadAccounts");
+  await pop.waitForTimeout(900);
+  ok("collapsed ads are not re-read by the refresh", listCalls() === l1 && statCalls() === s1, `${l1}/${s1} -> ${listCalls()}/${statCalls()}`);
+  ok("…and stay collapsed", (await pop.locator(".ad").count()) === 0);
   await b.ctx.close();
 
   // only the all-time part is refused: the other periods are read again and shown, All time says so
@@ -411,8 +435,8 @@ async function adsFlows() {
     if (mode !== "down") {
       await resetLocks(pop);
       const before = statCalls2(b);
-      await pop.click(".acc.open .icon-btn[data-ads]");
-      await pop.waitForTimeout(600);
+      await pop.click("#loadAccounts");
+      await pop.waitForTimeout(800);
       ok(`numbers ${mode}: refused for this account -> not asked again`, statCalls2(b) === before, `${before} -> ${statCalls2(b)}`);
     }
     await b.ctx.close();

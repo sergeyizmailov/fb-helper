@@ -682,7 +682,15 @@ let accBusy = false;                                    // one list load at a ti
 async function fetchAccounts(opts) {
   if (accBusy) return;
   accBusy = true;
-  try { await loadAccountsNow(opts); } finally { accBusy = false; }
+  try {
+    const gen = state.gen;
+    // A click also re-reads the ads on screen; the automatic load leaves them (no request nobody asked for).
+    if (await loadAccountsNow(opts) && !opts?.auto && gen === state.gen) {
+      const btn = $("#loadAccounts");
+      btn.disabled = true; btn.setAttribute("aria-busy", "true");
+      try { await reloadShownAds(gen); } finally { btn.disabled = false; btn.removeAttribute("aria-busy"); }
+    }
+  } finally { accBusy = false; }
 }
 async function loadAccountsNow({ auto = false } = {}) {
   await settledGrab();
@@ -726,6 +734,7 @@ async function loadAccountsNow({ auto = false } = {}) {
     await saveSession({ accounts: rows, fetchedAt: state.fetchedAt, truncated: state.truncated, owner, ads: adsToSave() });
     saveView();
     if (!auto || after) toast(t("acc.loaded", { n: rows.length }) + (after ? t("acc.truncated") : ""));   // the list itself is the answer to an automatic load
+    return true;
   } catch (e) {
     if (!(e instanceof Stale)) toast(e.message, true);
   } finally {
@@ -956,8 +965,8 @@ function syncAdsButtons() {
 const adsBox = (id) => document.querySelector(`[data-ads-box="${CSS.escape(id)}"]`);
 // Only successful reads are kept across popup reopens: an error text would sit on the row long after it is stale.
 const adsToSave = () => Object.fromEntries(Object.entries(state.ads).filter(([, v]) => !v.error).map(([k, { stale, statsFail, ...v }]) => [k, v]));
-// Before the first load: one "Ads" button. After: a show/hide toggle (no request, uses the
-// cached list) + a refresh icon that re-reads Graph and is the only control bound to the 30 s lock.
+// Before the first load: one "Ads" button. After: a show/hide toggle (no request, uses the cached list).
+// Re-reading the ads is the refresh button above the list (fetchAccounts), not a control of its own.
 function adsControls(id) {
   const data = state.ads[id];
   if (!data) return el("div", { class: "actions" },
@@ -967,9 +976,7 @@ function adsControls(id) {
   return el("div", { class: "actions" },
     el("button", { class: "btn sm", "aria-expanded": String(!hidden), "data-focus": `adsToggle:${id}`, onclick: () => {
       state.adsHidden[hidden ? "delete" : "add"](id); saveView(); renderAccounts();
-    } }, el("i", { class: `i i-chevron${hidden ? "" : " up"}` }), hidden ? `${t("ads.btn")}${data.error ? "" : ` · ${n}`}` : t("ads.collapse")),
-    el("button", { class: "icon-btn sm", "data-ads": id, "data-focus": `ads:${id}`, disabled: adsBlocked(id), title: t("ads.refresh"),
-                   "aria-label": t("ads.refresh"), onclick: () => loadAds(id) }, el("i", { class: "i i-refresh" })));
+    } }, el("i", { class: `i i-chevron${hidden ? "" : " up"}` }), hidden ? `${t("ads.btn")}${data.error ? "" : ` · ${n}`}` : t("ads.collapse")));
 }
 // "$12.40 · 3,100 impressions · 48 clicks". An active ad with no delivery says so; a paused one stays quiet.
 // s = [spend, impressions, clicks] as stored, or null = unknown.
@@ -990,13 +997,13 @@ function renderAds(box, { ads, more, error, stale, stats, statsAt, statsAll, sta
   const count = (st) => ads.filter((ad) => st.includes(ad.effective_status)).length;
   const live = count(["ACTIVE"]), rejected = count(AD_PROBLEMS);
   // Numbers of the selected period. They come from a second read (after the list is on screen), so they may be
-  // loading, refused, or from an earlier day. One hint says which; "All time" adds Meta's 37-month cap.
+  // loading, refused, or from an earlier day. One hint says which.
   const all = state.period === "all";
   const alias = all ? AD_ALL : PERIODS.find((p) => p.key === state.period).alias;
   const fresh = !!stats && sameDay(acc?.timezone_name, statsAt);
   const shown = fresh && (!all || !!statsAll);
   const hint = statsFail ? t("ads.statsFail") : state.statsBusy.has(id) ? t("ads.statsLoading")
-    : !stats ? "" : !fresh ? t("ads.old") : all ? t(statsAll ? "ads.allNote" : "ads.noAll") : "";
+    : !stats ? "" : !fresh ? t("ads.old") : all && !statsAll ? t("ads.noAll") : "";
   fill(box, el("div", { class: "ads-sum" },
       `${ads.length}${more ? "+" : ""} ${tn(ads.length, "ads.count")}`,
       live ? t("ads.live", { n: live }) : "", rejected ? el("span", { class: "err-text" }, t("ads.rejected", { n: rejected })) : "",
@@ -1062,26 +1069,29 @@ async function loadAdStats(id, gen, entry) {
   saveSession({ ads: adsToSave() });
   renderAccounts();
 }
-async function loadAds(id) {
+// quiet: part of the refresh button's batch. No toasts (a lock still held, a failure: the row says the list is old),
+// and a list already on screen stays until the new one replaces it. The list keeps its expanded/collapsed state.
+async function loadAds(id, { quiet = false } = {}) {
   if (state.adsBusy.has(id)) return;
+  const say = (m) => { if (!quiet) toast(m, true); };
   await settledGrab();
-  if (!state.token && !(await grabToken({ toClipboard: false }))) return;
-  if (isDead()) return toast(t("err.session", { c: deadCode() }), true);
+  if (!state.token && !(await grabToken({ toClipboard: false, silent: quiet }))) return;
+  if (isDead()) return say(t("err.session", { c: deadCode() }));
   const gen = state.gen, busy = state.adsBusy;        // fixed before waiting for the lock
   busy.add(id);
   syncAdsButtons();
   let wait;
   try { wait = await claimSlot(id); }
-  catch (e) { busy.delete(id); syncAdsButtons(); return toast(t("err.slot", { m: e.message }), true); }
+  catch (e) { busy.delete(id); syncAdsButtons(); return say(t("err.slot", { m: e.message })); }
   if (gen !== state.gen) { busy.delete(id); return; } // new token while waiting: old account list
   if (wait > 0) {
     busy.delete(id); syncAdsButtons();
-    return toast(t("ads.wait"), true);
+    return say(t("ads.wait"));
   }
   syncAdsButtons();
   setTimeout(syncAdsButtons, ADS_LOCK_MS + 50);
   const box = adsBox(id);
-  if (box) fill(box, el("div", { class: "hint" }, t("ads.loading")));
+  if (box && !(quiet && state.ads[id])) fill(box, el("div", { class: "hint" }, t("ads.loading")));
   let entry = null;
   try {
     const res = await readAds(id);
@@ -1105,16 +1115,27 @@ async function loadAds(id) {
     // A failed refresh must not wipe the list you already have (a pause, a dead session, a timeout),
     // but the row says the list is old.
     const prev = state.ads[id];
-    if (prev && !prev.error) { state.ads[id] = { ...prev, stale: e.message }; toast(e.message, true); }
+    if (prev && !prev.error) { state.ads[id] = { ...prev, stale: e.message }; say(e.message); }
     else state.ads[id] = { ads: [], error: e.message };
   } finally {
     busy.delete(id);                                    // our generation's set, not a newer one's
     syncAdsButtons();
   }
-  state.adsHidden.delete(id);                           // a fresh load is shown expanded
+  if (!quiet) state.adsHidden.delete(id);              // a fresh load is shown expanded
   saveSession({ ads: adsToSave() }); saveView();
   renderAccounts();
   if (entry) await loadAdStats(id, gen, entry);        // the list is on screen; the numbers follow
+}
+// The refresh button re-reads what is on screen: the ads of open accounts whose list is expanded (and error rows,
+// which have no other retry). Collapsed and closed ones are not asked. Three at a time; stops on a new token,
+// a dead session or an API pause.
+async function reloadShownAds(gen) {
+  const ids = state.accounts.map((a) => a.account_id).filter((id) => state.open.has(id) && state.ads[id] && !state.adsHidden.has(id));
+  let next = 0;
+  const worker = async () => {
+    while (next < ids.length && gen === state.gen && !isDead() && state.cooldownUntil <= Date.now()) await loadAds(ids[next++], { quiet: true });
+  };
+  await Promise.all(Array.from({ length: Math.min(3, ids.length) }, worker));
 }
 
 // The ⟳ next to the token: read it again from the open FB tabs (no clipboard, no request to Graph).

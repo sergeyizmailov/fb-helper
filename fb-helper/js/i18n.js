@@ -23,7 +23,7 @@ const D = {
     "copyJson.title": "Те же cookie с атрибутами (domain, path, срок) — для импорта в антидетект",
     "search": "Поиск", "search.aria": "Поиск кабинетов",
     "liveIds": "ID активных", "liveIds.title": "ID активных кабинетов списком, по одному в строке",
-    "refresh": "Обновить", "period.aria": "Период спенда",
+    "refresh": "Обновить кабинеты и объявления", "period.aria": "Период спенда",
 
     "kind.EAAB": "Основной для рекламы: запуск и правка.",
     "kind.EAAG": "Бизнес-активы: страницы, Instagram, лиды, WhatsApp, каталоги и реклама.",
@@ -94,12 +94,12 @@ const D = {
     "acc.noLimit": "без лимита", "acc.spendCap": "Spend cap", "acc.no": "нет", "acc.funding": "Оплата", "acc.pixels": "Пиксели",
     "acc.noPixel": "нет пикселя", "acc.owner": "Владелец", "acc.bmPrefix": "БМ ", "acc.noBm": "без БМ", "acc.country": "Страна / создан",
 
-    "ads.btn": "Объявления", "ads.collapse": "Свернуть объявления", "ads.refresh": "Обновить объявления", "ads.none": "Объявлений нет",
+    "ads.btn": "Объявления", "ads.collapse": "Свернуть объявления", "ads.none": "Объявлений нет",
     "ads.count": ["объявление", "объявления", "объявлений"], "ads.live": " · {n} активно", "ads.rejected": " · {n} отклонено",
     "ads.more": "Показано {n}, есть ещё — остальное в Ads Manager", "ads.wait": "Объявления этого кабинета можно запросить раз в 30 с",
     "ads.loading": "Загрузка…", "ads.imp": ["показ", "показа", "показов"], "ads.clk": ["клик", "клика", "кликов"], "ads.noDelivery": "Нет показов за период",
     "ads.statsLoading": "Загружаю цифры…", "ads.statsFail": "Цифры по объявлениям не загрузились", "ads.statsAt": " · цифры: {a}",
-    "ads.noAll": "За всё время Graph не отдал цифры (слишком много данных)", "ads.allNote": "Всё время — не больше 37 месяцев (лимит Meta)", "ads.old": "Цифры устарели — обнови объявления", "ads.stale": "Не обновилось: {m}. Показан прошлый список",
+    "ads.noAll": "За всё время Graph не отдал цифры (слишком много данных)", "ads.old": "Цифры устарели — нажми «Обновить» вверху", "ads.stale": "Не обновилось: {m}. Показан прошлый список",
   },
   en: {
     "lang.title": "Interface language",
@@ -117,7 +117,7 @@ const D = {
     "copyJson.title": "Same cookies with attributes (domain, path, expiry) — for import into an antidetect browser",
     "search": "Search", "search.aria": "Search ad accounts",
     "liveIds": "Active IDs", "liveIds.title": "IDs of active ad accounts, one per line",
-    "refresh": "Refresh", "period.aria": "Spend period",
+    "refresh": "Refresh accounts and ads", "period.aria": "Spend period",
 
     "kind.EAAB": "The main ads token: launch and edit.",
     "kind.EAAG": "Business assets: pages, Instagram, leads, WhatsApp, catalogs and ads.",
@@ -188,12 +188,12 @@ const D = {
     "acc.noLimit": "no limit", "acc.spendCap": "Spend cap", "acc.no": "none", "acc.funding": "Payment", "acc.pixels": "Pixels",
     "acc.noPixel": "no pixel", "acc.owner": "Owner", "acc.bmPrefix": "Business ", "acc.noBm": "no business", "acc.country": "Country / created",
 
-    "ads.btn": "Ads", "ads.collapse": "Hide ads", "ads.refresh": "Refresh ads", "ads.none": "No ads",
+    "ads.btn": "Ads", "ads.collapse": "Hide ads", "ads.none": "No ads",
     "ads.count": ["ad", "ads"], "ads.live": " · {n} active", "ads.rejected": " · {n} disapproved",
     "ads.more": "Showing {n}, more exist — the rest is in Ads Manager", "ads.wait": "Ads of one account can be requested once per 30 s",
     "ads.loading": "Loading…", "ads.imp": ["impression", "impressions"], "ads.clk": ["click", "clicks"], "ads.noDelivery": "No delivery in this period",
     "ads.statsLoading": "Loading numbers…", "ads.statsFail": "Ad numbers did not load", "ads.statsAt": " · numbers: {a}",
-    "ads.noAll": "Graph did not return all-time numbers (too much data)", "ads.allNote": "All time is capped at 37 months (Meta's limit)", "ads.old": "Numbers are out of date — refresh the ads", "ads.stale": "Not refreshed: {m}. Showing the previous list",
+    "ads.noAll": "Graph did not return all-time numbers (too much data)", "ads.old": "Numbers are out of date — press Refresh at the top", "ads.stale": "Not refreshed: {m}. Showing the previous list",
   },
 };
 
