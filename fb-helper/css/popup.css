@@ -66,6 +66,12 @@ body.tall { min-height: 600px; }
   background: var(--color-background-surface);
   padding-bottom: 0;
 }
+/* What scrolls under the tabs fades out a little instead of being cut in a straight line against the grey bar
+   (a grey card would otherwise merge with it). White over white at rest: the first row starts 12px lower. */
+.bar::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 12px; pointer-events: none;
+  background: linear-gradient(rgba(255, 255, 255, 1), rgba(255, 255, 255, 0));
+}
 .top {
   display: flex; align-items: center; justify-content: space-between;
   height: 48px; padding: 0 var(--spacing-4);
@@ -107,7 +113,6 @@ main { padding-bottom: 0; }
 .card { position: relative; display: grid; gap: var(--spacing-3); min-width: 0; padding: var(--spacing-4); }
 .panel > .card:first-child { padding-top: var(--spacing-3); }   /* tabs → content = the 12px gap used inside cards */
 
-.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-1-5); }
 .hint { color: var(--color-text-secondary); }
 
 /* ---------- controls ---------- */
@@ -127,8 +132,6 @@ main { padding-bottom: 0; }
 /* Ghost: text + icon only, no fill — like the icon buttons; hover just darkens the text. */
 .btn.ghost, .btn.ghost:hover:not(:disabled), .btn.ghost:focus-visible { background: transparent; }
 .btn.ghost { padding: 0 var(--spacing-2); }
-.btn.sm { height: var(--size-element-sm); padding: 0 var(--spacing-3); }
-.btn.sm .i { --size-icon: 16px; }
 .icon-btn {
   appearance: none; border: 0; background: transparent; color: var(--color-text-secondary); cursor: pointer;
   display: inline-grid; place-items: center; flex: none;
@@ -323,12 +326,35 @@ main { padding-bottom: 0; }
 .owner-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* a long BM name ends in "…"; the full one is the tooltip */
 .owner .i { --size-icon: 14px; }
 .acc-meta { min-width: 0; padding-left: 22px; display: flex; flex-wrap: wrap; gap: 2px var(--spacing-3); color: var(--color-text-secondary); }
-.acc-body { display: none; gap: var(--spacing-3); padding: var(--spacing-1) var(--spacing-4) var(--spacing-4) calc(var(--spacing-4) + 22px); }
+.acc-body { --acc-indent: 22px; display: none; gap: var(--spacing-3); padding: var(--spacing-1) var(--spacing-4) var(--spacing-4) calc(var(--spacing-4) + var(--acc-indent)); }
 .acc.open .acc-body { display: grid; }
 .ads { display: grid; }
 .ads:empty { display: none; }
+/* The ads of an account: one full-width grey card. Its header (.ads-toggle) is the same box before the first load,
+   collapsed and open, so toggling moves nothing; the card reaches back over the rows' indent, gutters left = right. */
+.ads-card { margin-left: calc(-1 * var(--acc-indent)); background: var(--color-background-muted); border-radius: calc(var(--radius-element) + 4px); overflow: hidden; }
+.ads-head { display: flex; align-items: center; }
+.ads-toggle {
+  appearance: none; border: 0; cursor: pointer; flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--spacing-1-5);
+  height: var(--size-element-md); padding: 0 var(--spacing-3); background: transparent; color: var(--color-text-secondary);
+  font: var(--text-md) var(--font); text-align: left; white-space: nowrap;
+}
+.ads-toggle .i { --size-icon: 14px; }
+/* Hover like the tabs: the bar stays put, only the words darken (open or closed, so the dark word means "this will act"). */
+.ads-toggle:hover:not(:disabled), .ads-toggle:focus-visible { color: var(--color-text-primary); }
+.ads-toggle:disabled { color: var(--color-text-disabled); cursor: default; }
+/* The refresh icon of the ads: same rest/hover pair as the tabs (grey, darker on hover), no fill. */
+.ads-refresh {
+  appearance: none; border: 0; background: transparent; cursor: pointer; flex: none;
+  width: var(--size-element-md); height: var(--size-element-md); display: grid; place-items: center; color: var(--color-text-secondary);
+}
+.ads-refresh .i { --size-icon: 16px; }
+.ads-refresh:hover:not(:disabled), .ads-refresh:focus-visible { color: var(--color-text-primary); }
+.ads-refresh:disabled { color: var(--color-text-disabled); cursor: default; }
+.ads-card .ads { padding: 0 var(--spacing-3) var(--spacing-1); }
+.ads-card .ad { border-top-color: rgba(28, 30, 33, .08); }
+.ads-card .pill:not(.ok):not(.warn):not(.bad) { background: var(--color-background-surface); }   /* the neutral pill must not vanish into the grey */
 .ads-sum { padding-bottom: var(--spacing-2); color: var(--color-text-secondary); font-size: var(--text-sm); }
-.btn.sm .i-chevron { --size-icon: 14px; }
 .i-chevron.up { transform: rotate(180deg); }
 .ad { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--spacing-2); align-items: center; padding: var(--spacing-2) 0; border-top: 1px solid var(--color-border); }
 .ad > span:first-child { overflow-wrap: anywhere; }
@@ -350,7 +376,7 @@ main { padding-bottom: 0; }
 @media (max-width: 460px) {
   .seg { grid-template-columns: repeat(3, 1fr); }
   .kv { grid-template-columns: 96px minmax(0, 1fr); }
-  .acc-body { padding-left: var(--spacing-4); }
+  .acc-body { --acc-indent: 0px; }
   #copyLiveIds span { display: none; }
   .total { grid-template-columns: minmax(0, 1fr); }
   .total-meta { text-align: left; white-space: normal; }

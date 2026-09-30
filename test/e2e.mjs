@@ -246,11 +246,10 @@ async function sessionFlows() {
   await adsPage(b2);
   pop = await popup(b2, "accounts");
   await loadAccounts(pop, 1); await openAds(pop);
-  b2.graph = (u) => isAds(u) ? dead(190, 463) : { body: accountsJson }; await resetLocks(pop);
-  await pop.click("#loadAccounts");
-  await until(pop, () => /190\/463/.test(document.querySelector(".ads")?.textContent || ""));
+  b2.graph = () => dead(190, 463); await resetLocks(pop);
+  const toast = await clickToast(pop, ".acc.open .ads-refresh");
   ok("failed ads refresh keeps the list", has(await text(pop, ".ads"), "Keep me"), await text(pop, ".ads"));
-  ok("…and the row reports the code", has(await text(pop, ".ads"), "190/463"), await text(pop, ".ads"));
+  ok("…and reports the code in a toast", has(toast, "190/463"), toast);
   await b2.ctx.close();
 }
 
@@ -315,11 +314,10 @@ async function adsFlows() {
   b = await boot({ fb: adsFb(TOK), graph: (u) => isAds(u) ? (fail ? { status: 500, body: { error: { code: 1, message: "boom" } } } : { body: { data: [base] } }) : { body: accountsJson } });
   pop = await open(b);
   fail = true; await resetLocks(pop);
-  await pop.click("#loadAccounts");
-  await until(pop, () => /Not refreshed/.test(document.querySelector(".ads")?.textContent || ""));
+  const toast = await clickToast(pop, ".acc.open .ads-refresh");
   ok("failed refresh: list kept", (await pop.locator(".ad").count()) === 1);
+  ok("failed refresh: error toast", has(toast, "boom"), toast);
   ok("failed refresh: the row says the list is old", has(await text(pop, ".ads"), "Not refreshed: boom"), await text(pop, ".ads"));
-  ok("failed refresh: no error toast for a batch member", !has(await text(pop, "#toast"), "boom"), await text(pop, "#toast"));
   ok("…and that mark is not persisted", !JSON.stringify(await stored(pop, "ads")).includes("stale"));
   ok("stored ads have no error text", !JSON.stringify(await stored(pop, "ads")).includes("boom"));
   await b.ctx.close();
@@ -356,7 +354,7 @@ async function adsFlows() {
   };
   b = await boot({ fb: adsFb(TOK), graph: statMock });
   pop = await open(b);
-  await until(pop, () => /numbers:/.test(document.querySelector(".ads-sum")?.textContent || ""));
+  await until(pop, () => /metrics updated/.test(document.querySelector(".ads-sum")?.textContent || ""));
   const adLines = () => pop.$$eval(".ad", (n) => n.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
   const listCalls = () => b.hits.filter((h) => h.includes("/ads?") && !h.includes("p_today")).length;
   const statCalls = () => b.hits.filter((h) => h.includes("/ads?") && h.includes("p_today")).length;
@@ -369,7 +367,7 @@ async function adsFlows() {
   ok("singular counts", has(lines[3], "1 impression ") && has(lines[3], "1 click") && !has(lines[3], "1 clicks") && !has(lines[3], "1 impressions"), lines[3]);
   ok("active ad without delivery says so", has(lines[1], "No delivery in this period"), lines[1]);
   ok("paused ad without delivery stays quiet", !has(lines[2], "No delivery") && !has(lines[2], "$"), lines[2]);
-  ok("the sum line says how old the numbers are", has(await text(pop, ".ads-sum"), "numbers: just now"), await text(pop, ".ads-sum"));
+  ok("the sum line says how old the numbers are", has(await text(pop, ".ads-sum"), "metrics updated just now"), await text(pop, ".ads-sum"));
   const calls = statCalls();
   await pop.click('.seg-btn:has-text("7 days")');
   lines = await adLines();
@@ -389,39 +387,62 @@ async function adsFlows() {
   ok("cached from an earlier day: hint, no numbers", has(oldTxt, "out of date") && !has(oldTxt, "$12.40"), oldTxt);
   await b.ctx.close();
 
-  // one refresh button: the account list AND the ads on screen; collapsed / closed ones are not asked
+  // the button above the list refreshes the accounts only; each account's ads have their own refresh icon
   const liveAds = listAds.map((a) => ({ ...a })), liveRows = statRows.map((r) => ({ ...r }));
   b = await boot({ fb: adsFb(TOK), graph: (u) => !isAds(u) ? { body: accountsJson } : isStats(u) ? { body: { data: liveRows } } : { body: { data: liveAds } } });
   pop = await open(b);
-  await until(pop, () => /numbers:/.test(document.querySelector(".ads-sum")?.textContent || ""));
-  ok("no separate refresh icon on the ads", (await pop.locator(".acc.open .icon-btn[data-ads]").count()) === 0);
-  const [l0, s0, a0] = [listCalls(), statCalls(), b.hits.filter((h) => !h.includes("/ads?")).length];
-  liveAds[0].name = "Busy renamed"; liveRows[0].p_today = ins("20", "4000", "50");
-  await resetLocks(pop); await pop.click("#loadAccounts");
-  await until(pop, () => /Busy renamed/.test(document.querySelector(".ad")?.textContent || "") && /\$20\.00/.test(document.querySelector(".ad")?.textContent || ""));
-  lines = await adLines();
-  ok("refresh re-reads the ads on screen: new list and new numbers", has(lines[0], "Busy renamed") && has(lines[0], "$20.00") && has(lines[0], "50 clicks"), lines[0]);
-  ok("…one accounts read, one list read, one numbers read", b.hits.filter((h) => !h.includes("/ads?")).length === a0 + 1 && listCalls() === l0 + 1 && statCalls() === s0 + 1, `${a0}/${l0}/${s0} -> ${b.hits.filter((h) => !h.includes("/ads?")).length}/${listCalls()}/${statCalls()}`);
-  ok("…the list stays expanded", (await pop.locator(".ad").count()) === 4);
-  await pop.click(".acc.open .actions button");                  // collapse
-  const [l1, s1] = [listCalls(), statCalls()];
+  await until(pop, () => /metrics updated/.test(document.querySelector(".ads-sum")?.textContent || ""));
+  const accReads = () => b.hits.filter((h) => !h.includes("/ads?")).length;
+  const [l0, s0, a0] = [listCalls(), statCalls(), accReads()];
   await resetLocks(pop); await pop.click("#loadAccounts");
   await pop.waitForTimeout(900);
-  ok("collapsed ads are not re-read by the refresh", listCalls() === l1 && statCalls() === s1, `${l1}/${s1} -> ${listCalls()}/${statCalls()}`);
-  ok("…and stay collapsed", (await pop.locator(".ad").count()) === 0);
+  ok("the top refresh reads the accounts only, the ads cost nothing", accReads() === a0 + 1 && listCalls() === l0 && statCalls() === s0, `${a0}/${l0}/${s0} -> ${accReads()}/${listCalls()}/${statCalls()}`);
+  ok("…and the ads card is still expanded", (await pop.locator(".ad").count()) === 4);
+  liveAds[0].name = "Busy renamed"; liveRows[0].p_today = ins("20", "4000", "50");
+  await resetLocks(pop); await pop.click(".acc.open .ads-refresh");
+  await until(pop, () => /Busy renamed/.test(document.querySelector(".ad")?.textContent || "") && /\$20\.00/.test(document.querySelector(".ad")?.textContent || ""));
+  lines = await adLines();
+  ok("the ads icon re-reads this account's ads: new list and new numbers", has(lines[0], "Busy renamed") && has(lines[0], "$20.00") && has(lines[0], "50 clicks"), lines[0]);
+  ok("…one list read, one numbers read, no accounts read", listCalls() === l0 + 1 && statCalls() === s0 + 1 && accReads() === a0 + 1, `${l0}/${s0} -> ${listCalls()}/${statCalls()}, accounts ${accReads()}`);
+  ok("…the list stays expanded", (await pop.locator(".ad").count()) === 4);
+  // a popup opened hours later shows the old numbers; the ads icon replaces them
+  // (up to 3 h, but never past UTC midnight: the mock account is in UTC and numbers of an earlier day are hidden)
+  await pop.evaluate(() => { const d = new Date(), back = Math.min(3 * 3600000, d - Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - 90000);
+    return chrome.storage.session.get("ads").then((o) => { for (const v of Object.values(o.ads)) v.statsAt -= back; return chrome.storage.session.set({ ads: o.ads }); }); });
+  const re = await popup(b, "accounts"); await rowsAre(re, ".acc", 1);
+  await until(re, () => /metrics updated (\d+ (min|h) ago|just now)/.test(document.querySelector(".ads-sum")?.textContent || ""));
+  ok("reopened later: the sum line shows the age of the numbers", /metrics updated (\d+ (min|h) ago|just now)/.test(await text(re, ".ads-sum")), await text(re, ".ads-sum"));
+  liveRows[0].p_today = ins("33", "5000", "60");
+  await resetLocks(re); await re.click(".acc.open .ads-refresh");
+  await until(re, () => /metrics updated just now/.test(document.querySelector(".ads-sum")?.textContent || ""));
+  ok("…the ads icon brings the numbers up to date", has(await text(re, ".ads-sum"), "metrics updated just now") && has(await text(re, ".ad"), "$33.00"), await text(re, ".ads-sum") + " | " + await text(re, ".ad"));
+  await re.close();
+  // the card is symmetric and its header does not move when the list folds or unfolds
+  const geo = () => pop.$eval(".acc.open .ads-toggle", (n) => { const r = n.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round).join(); });
+  const gap = () => pop.$eval(".acc.open .ads-card", (n) => { const r = n.getBoundingClientRect(), bb = document.body.getBoundingClientRect(); return { l: Math.round(r.left - bb.left), r: Math.round(bb.right - r.right) }; });
+  const gOpen = await geo(), gg = await gap();
+  ok("ads card: same gap left and right", Math.abs(gg.l - gg.r) <= 1, JSON.stringify(gg));
+  await pop.hover(".acc.open .ads-toggle");
+  ok("hover on the ads header keeps the bar as it is (words only, like the tabs)", (await pop.$eval(".acc.open .ads-toggle", (n) => getComputedStyle(n).backgroundColor)) === "rgba(0, 0, 0, 0)");
+  await pop.click(".acc.open .ads-toggle");                      // collapse
+  const gShut = await geo();
+  ok("folding the ads keeps the header exactly where it was", gOpen === gShut, `${gOpen} -> ${gShut}`);
+  ok("…and folded, the refresh icon is still there", (await pop.locator(".acc.open .ads-refresh").count()) === 1);
+  await pop.click(".acc.open .ads-toggle");                      // expand
+  ok("unfolding keeps it there too", (await geo()) === gOpen, `${gOpen} -> ${await geo()}`);
   await b.ctx.close();
 
   // only the all-time part is refused: the other periods are read again and shown, All time says so
   statsMode = "noall";
   b = await boot({ fb: adsFb(TOK), graph: statMock });
   pop = await open(b);
-  await until(pop, () => /numbers:/.test(document.querySelector(".ads-sum")?.textContent || ""));
+  await until(pop, () => /metrics updated/.test(document.querySelector(".ads-sum")?.textContent || ""));
   const sc = b.hits.filter((h) => h.includes("/ads?") && h.includes("p_today"));
   ok("all-time refused -> one retry without it", sc.length === 2 && has(sc[0], "p_all") && !has(sc[1], "p_all") && has(sc[1], "p_month"), sc.length + " " + sc.map((h) => has(h, "p_all")).join());
   lines = await adLines();
   ok("all-time refused -> Today still shown", has(lines[0], "$12.40"), lines[0]);
   await pop.click('.seg-btn:has-text("All time")');
-  ok("all-time refused -> no numbers, one honest hint", (await pop.locator(".ad-stats").count()) === 0 && has(await text(pop, ".ads"), "did not return all-time numbers"), await text(pop, ".ads"));
+  ok("all-time refused -> no numbers, one honest hint", (await pop.locator(".ad-stats").count()) === 0 && has(await text(pop, ".ads"), "did not return all-time metrics"), await text(pop, ".ads"));
   await b.ctx.close();
 
   // the numbers fail (too heavy / field refused / server down): the list stays, one hint, nothing else lost
@@ -430,12 +451,12 @@ async function adsFlows() {
     b = await boot({ fb: adsFb(TOK), graph: statMock });
     pop = await open(b);
     await until(pop, () => /did not load/.test(document.querySelector(".ads")?.textContent || ""));
-    ok(`numbers ${mode}: list shown (4 ads), hint, no stats lines`, (await pop.locator(".ad").count()) === 4 && (await pop.locator(".ad-stats").count()) === 0 && has(await text(pop, ".ads"), "Ad numbers did not load"), await text(pop, ".ads"));
+    ok(`numbers ${mode}: list shown (4 ads), hint, no stats lines`, (await pop.locator(".ad").count()) === 4 && (await pop.locator(".ad-stats").count()) === 0 && has(await text(pop, ".ads"), "Ad metrics did not load"), await text(pop, ".ads"));
     ok(`numbers ${mode}: the failure mark is not persisted`, !JSON.stringify(await stored(pop, "ads")).includes("statsFail"));
     if (mode !== "down") {
       await resetLocks(pop);
       const before = statCalls2(b);
-      await pop.click("#loadAccounts");
+      await pop.click(".acc.open .ads-refresh");
       await pop.waitForTimeout(800);
       ok(`numbers ${mode}: refused for this account -> not asked again`, statCalls2(b) === before, `${before} -> ${statCalls2(b)}`);
     }
